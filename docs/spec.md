@@ -1,10 +1,11 @@
-# Zendo 仕様書 (Draft v0.3)
+# Zendo 仕様書 (Draft v0.4)
 
 > ADHD当事者のための「計画の困難さ」「忘却」を補うパーソナルToDo/タスク管理アプリ。
 > このドキュメントは仕様検討用のドラフト。未確定事項は「❓」で明示し、随時更新する。
 >
 > v0.2: 旧仕様書「Z-Tasks 総合仕様書」の内容をマージ。データモデルをProject/ToDo/Habitの3区分に再編。
 > v0.3: 技術スタック確定（Next.js + TypeScript + Tailwind/shadcn + Supabase Postgres）。実装フェーズへ移行。
+> v0.4: DB詳細設計を database-design.md として分離・確定。DBアクセスをAPI Routes経由に一本化。
 
 ---
 
@@ -138,40 +139,16 @@ Habit: 状態遷移ではなく「実践ログ」の蓄積（continuous）。デ
 
 ---
 
-## 5. データモデル（案）
+## 5. データモデル
 
-```
-Item (共通基底)
-  id, type: 'project' | 'todo' | 'habit' | 'inbox'
-  title, notes(markdown), created_at, updated_at
-  parent_id (nullable, 親Project/親ToDo。ToDoは再帰的に子ToDoを持てる)
-  tags[]
+詳細設計は **[database-design.md](database-design.md)** に確定版として分離した（そちらを正とする）。概要:
 
-Project extends Item
-  due_date (nullable, 最終締め切り)
-  status: 'todo' | 'doing' | 'done' | 'dropped'
-
-ToDo extends Item
-  due_date, due_time (nullable)
-  status: 'todo' | 'doing' | 'done' | 'dropped'
-  recurrence_rule (nullable)
-  reminders: Reminder[]
-  is_memo: boolean (期限なしメモとして扱う場合の簡易フラグ、❓ or タグで表現するかは実装時に検討)
-
-Habit
-  id, title, notes(markdown), tags[]
-  frequency_rule (例: {type: 'weekly_count', count: 3} / {type: 'weekdays', days:[1,3,5]})
-  logs: HabitLog[] (date, done: boolean)
-  reminders: Reminder[]
-
-Reminder
-  id, item_id, trigger_at | relative_rule, snoozed_until, channel
-
-CalendarSyncLink
-  item_id, google_event_id, direction, last_synced_at
-```
-
-❓ 上記はたたき台。特に Habit の frequency_rule とリマインダーの表現力（自然文入力からどこまで柔軟に対応するか）は実装難易度に直結するため、MVPでは簡略化ルールに絞る想定。
+- `items` テーブル1つに Inbox / Project / ToDo を `kind` 列で同居（トリアージ＝kind更新、ToDo⇄Project昇格降格も自由）
+- 習慣は `habits`（マスター）＋ デイリープランナーが生成する「habit_id付きToDo行」（実践ログは導出、専用ログテーブルなし）
+- `is_memo` は専用列で確定（タグ方式はタイプミス事故のため不採用。旧❓解消）
+- 繰り返しは「完了時に次回1件だけ生成、過去分は積み上げない」セマンティクス（ADHD配慮の中核設計。詳細は database-design.md 4章）
+- リマインダーはルール（相対/絶対）と解決済み発火時刻の2層で保持
+- CalendarSyncLink はMVP対象外のため未作成（将来テーブル追加のみで対応可能な設計）
 
 ---
 
@@ -183,6 +160,7 @@ CalendarSyncLink
 | スタイリング/UI | **Tailwind CSS + shadcn/ui**（shadcn/uiはコードを直接リポジトリにコピーする方式のため、中身がブラックボックス化しない） |
 | フロントエンド配信形態 | PWA一本化（ホーム画面追加、Web Push、Service Workerでオフライン対応）。対応端末はAndroidのみを想定 |
 | データベース | **Supabase Postgres** のみ利用（Auth基盤・Realtimeは現時点で不使用、Edge Functionsも使わない）。関係モデルの複雑さ（Project/ToDo/Habit/Reminderの関連）からPostgresを選定 |
+| DBアクセス経路 | **クライアントはSupabaseと直接通信せず、すべてAPI Routes経由**（v0.4確定）。理由: (a) 繰り返し完了時の次回生成等をサーバーでアトミックに実行 (b) 将来のDB乗り換え時にクライアント無変更 (c) DB接続キーをブラウザに露出させない。詳細は database-design.md 2章 |
 | バックエンドロジック | Next.jsの **API Routes**（Vercelにデプロイ）が担う。Claude API呼び出し・Google OAuth処理などの秘密情報を扱う処理はすべてここに集約し、特定BaaSの無料プラン仕様変更に依存しないようにする |
 | AI連携 | Claude API をNext.js API Routes経由で呼び出し、APIキーはサーバー側（Vercelの環境変数）のみで保持 |
 | ホスティング | Vercel（Next.js標準のデプロイ先） |
