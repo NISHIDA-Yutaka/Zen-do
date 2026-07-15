@@ -27,6 +27,7 @@
 ```
 
 - Supabaseの全テーブルは **RLS有効・ポリシーなし**（= 公開キーでは何も読み書きできない）。API Routesだけが **secret key**（`sb_secret_...`、環境変数 `SUPABASE_SECRET_KEY`。旧 service_role キーの後継。Postgres上では service_role ロールとして動きRLSを迂回する）でアクセスする
+- **service_roleへの権限付与が必要**: ダッシュボードで「Automatically expose new tables」を無効にしていると、新規テーブルへの権限が service_role にも自動付与されず `permission denied` になる。`20260715000001_grant_service_role.sql` で service_role にだけ明示的に `grant` している（RLSは有効のままなので公開キーは引き続き全拒否）
 - publishable/anon などの公開キーはそもそもクライアントに配布しない（`NEXT_PUBLIC_` 環境変数に入れない）
 - cron用ルートだけは外部から叩かれるため `CRON_SECRET` によるBearer認証を必須にする
 
