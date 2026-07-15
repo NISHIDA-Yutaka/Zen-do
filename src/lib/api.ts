@@ -23,10 +23,15 @@ export async function parseBody<T>(
   schema: ZodType<T>,
 ): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
   let raw: unknown;
-  try {
-    raw = await req.json();
-  } catch {
-    return { ok: false, response: badRequest("リクエストボディが不正なJSONです") };
+  const text = await req.text();
+  if (text.trim() === "") {
+    raw = {}; // 本文なしのアクション系POST（全項目optionalなスキーマを想定）
+  } else {
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      return { ok: false, response: badRequest("リクエストボディが不正なJSONです") };
+    }
   }
   const result = schema.safeParse(raw);
   if (!result.success) {
