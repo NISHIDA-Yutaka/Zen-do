@@ -5,6 +5,20 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Zendo カラートークン（docs/design.md 1章）。色は意味にだけ使う */
+  --color-mikan: var(--mikan);
+  --color-mikan-soft: var(--mikan-soft);
+  --color-asagi: var(--asagi);
+  --color-asagi-soft: var(--asagi-soft);
+  --color-tokiwa: var(--tokiwa);
+  --color-tokiwa-soft: var(--tokiwa-soft);
+  --color-beni: var(--beni);
+  --color-beni-soft: var(--beni-soft);
+  --color-sumi: var(--sumi);
+  --color-nibi: var(--nibi);
+  --color-kinari: var(--kinari);
+  --color-keisen: var(--keisen);
+  --color-wakuiro: var(--wakuiro);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -49,24 +63,39 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Zendo パレット（和の伝統色）。docs/design.md が正 */
+  --mikan: #e85d04;
+  --mikan-soft: #fceee2;
+  --asagi: #0e7490;
+  --asagi-soft: #e2f1f5;
+  --tokiwa: #2e7d4f;
+  --tokiwa-soft: #e7f2ea;
+  --beni: #b3261e;
+  --beni-soft: #fbeae8;
+  --sumi: #201d1a;
+  --nibi: #6e675e;
+  --kinari: #faf6f0;
+  --keisen: #ebe7e1; /* 罫線 */
+  --wakuiro: #dad4ca; /* 入力枠・汎用ボタン枠 */
+
+  --background: #ffffff;
+  --foreground: var(--sumi);
+  --card: #ffffff;
+  --card-foreground: var(--sumi);
+  --popover: #ffffff;
+  --popover-foreground: var(--sumi);
+  --primary: var(--mikan);
+  --primary-foreground: #ffffff;
+  --secondary: var(--kinari);
+  --secondary-foreground: var(--sumi);
+  --muted: var(--kinari);
+  --muted-foreground: var(--nibi);
+  --accent: var(--kinari);
+  --accent-foreground: var(--sumi);
+  --destructive: var(--beni);
+  --border: var(--keisen);
+  --input: var(--wakuiro);
+  --ring: var(--mikan);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -83,38 +112,42 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/* ダークモード: 明度反転の最小対応（docs/design.md）。トークン差し替えのみで実現し dark: は書かない */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mikan: #f07a1f;
+    --mikan-soft: #3a2410;
+    --asagi: #56b3cc;
+    --asagi-soft: #12303a;
+    --tokiwa: #5aa87d;
+    --tokiwa-soft: #14301f;
+    --beni: #e0655c;
+    --beni-soft: #3a1512;
+    --sumi: #ede9e1;
+    --nibi: #a29a8c;
+    --kinari: #211e19;
+    --keisen: #35312a;
+    --wakuiro: #4a443b;
+
+    --background: #171512;
+    --foreground: var(--sumi);
+    --card: #211e19;
+    --card-foreground: var(--sumi);
+    --popover: #211e19;
+    --popover-foreground: var(--sumi);
+    --primary: var(--mikan);
+    --primary-foreground: #ffffff;
+    --secondary: var(--kinari);
+    --secondary-foreground: var(--sumi);
+    --muted: var(--kinari);
+    --muted-foreground: var(--nibi);
+    --accent: var(--kinari);
+    --accent-foreground: var(--sumi);
+    --destructive: var(--beni);
+    --border: var(--keisen);
+    --input: var(--wakuiro);
+    --ring: var(--mikan);
+  }
 }
 
 @layer base {

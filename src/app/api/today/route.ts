@@ -1,6 +1,7 @@
 // GET /api/today — Todayビュー用データ。
 //  - todos: 未完了ToDo（期日が今日以前＝今日分＋期限超過）。習慣インスタンスも含む
 //  - habitCandidates: 今日が該当日で、まだ当日インスタンス未生成の非pause習慣（デイリープランナー候補）
+//  - done: 今日(JST)完了したToDo（「完了済み n件」折りたたみ用。docs/design.md 2章）
 import { handle, json } from "@/lib/api";
 import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
@@ -21,6 +22,17 @@ export function GET(): Promise<Response> {
       .order("sort_order", { ascending: true });
     if (todoErr) throw new Error(todoErr.message);
     const todos = (todoData ?? []) as Item[];
+
+    const todayStartIso = new Date(`${today}T00:00:00+09:00`).toISOString();
+    const { data: doneData, error: doneErr } = await db
+      .from("items")
+      .select("*")
+      .eq("kind", "todo")
+      .eq("status", "done")
+      .gte("done_at", todayStartIso)
+      .order("done_at", { ascending: false });
+    if (doneErr) throw new Error(doneErr.message);
+    const done = (doneData ?? []) as Item[];
 
     // 今日該当の非pause習慣
     const { data: habitData, error: habitErr } = await db
@@ -44,6 +56,6 @@ export function GET(): Promise<Response> {
     );
     const habitCandidates = matching.filter((h) => !instantiated.has(h.id));
 
-    return json({ date: today, todos, habitCandidates });
+    return json({ date: today, todos, habitCandidates, done });
   });
 }

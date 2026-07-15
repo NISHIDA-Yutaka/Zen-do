@@ -1,42 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
 import { addDays, todayInJst } from "@/lib/date";
 import { getJson, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
 import type { Item } from "@/lib/types";
 
-type CaptureResult = { item: Item };
+type ItemResult = { item: Item };
 type ListResult = { items: Item[] };
-
-function tempInboxItem(title: string): Item {
-  const now = new Date().toISOString();
-  return {
-    id: `temp-${crypto.randomUUID()}`,
-    kind: "inbox",
-    title,
-    notes: "",
-    tags: [],
-    is_memo: false,
-    status: "todo",
-    parent_id: null,
-    habit_id: null,
-    due_date: null,
-    due_time: null,
-    recurrence_rule: null,
-    generated_from: null,
-    postponed_count: 0,
-    sort_order: 0,
-    done_at: null,
-    captured_raw: null,
-    created_at: now,
-    updated_at: now,
-  };
-}
 
 export function InboxView() {
   const [items, setItems] = useState<Item[]>([]);
-  const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -48,30 +22,23 @@ export function InboxView() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function capture() {
-    const trimmed = title.trim();
-    if (!trimmed) return;
+  async function capture(title: string) {
     setError(null);
-    const optimistic = tempInboxItem(trimmed);
-    setItems((prev) => [optimistic, ...prev]);
-    setTitle("");
     try {
-      const { item } = await postJson<CaptureResult>("/api/items", { title: trimmed });
-      setItems((prev) => prev.map((i) => (i.id === optimistic.id ? item : i)));
+      const { item } = await postJson<ItemResult>("/api/items", { title });
+      setItems((prev) => [item, ...prev]);
       notifyInboxChanged();
     } catch (e) {
-      setItems((prev) => prev.filter((i) => i.id !== optimistic.id));
-      setTitle(trimmed);
       setError((e as Error).message);
     }
   }
 
-  async function triage(item: Item, patch: { kind: "todo" | "project"; due_date?: string | null }) {
+  async function triage(item: Item, dueDate: string) {
     setError(null);
     setBusyIds((prev) => new Set(prev).add(item.id));
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      await patchJson(`/api/items/${item.id}`, patch);
+      await patchJson(`/api/items/${item.id}`, { kind: "todo", due_date: dueDate });
       notifyInboxChanged();
     } catch (e) {
       setItems((prev) => [item, ...prev]);
@@ -86,85 +53,51 @@ export function InboxView() {
   }
 
   return (
-    <section className="mx-auto max-w-2xl">
-      <h1 className="text-xl font-semibold">Inbox</h1>
-      <p className="text-muted-foreground mt-1 text-sm">思いついたら、まず投げ込む。仕分けは後で。</p>
+    <section>
+      <header className="flex items-baseline justify-between pt-2 pb-1">
+        <h1 className="text-lg font-bold">Inbox</h1>
+        <p className="text-nibi text-xs">未仕分け {items.length}件</p>
+      </header>
 
-      <form
-        className="mt-4 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void capture();
-        }}
-      >
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="タスクや思いつきを入力…"
-          aria-label="クイックキャプチャ"
-          className="border-input bg-background focus-visible:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2"
-        />
-        <Button type="submit" disabled={!title.trim()}>
-          追加
-        </Button>
-      </form>
-
-      {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+      {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
       {loading ? (
-        <p className="text-muted-foreground mt-6 text-sm">読み込み中…</p>
+        <p className="text-nibi py-4 text-sm">読み込み中…</p>
       ) : items.length === 0 ? (
-        <p className="text-muted-foreground mt-6 text-sm">未仕分けはありません。身軽ですね。</p>
+        <p className="text-nibi py-4 text-sm">未仕分けはありません。身軽ですね。</p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <ul>
           {items.map((item) => {
-            const busy = busyIds.has(item.id) || item.id.startsWith("temp-");
+            const busy = busyIds.has(item.id);
             return (
-              <li
-                key={item.id}
-                className="bg-card flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
-                <span className="flex shrink-0 items-center gap-1">
-                  <Button
-                    size="xs"
-                    variant="ghost"
+              <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title}</span>
+                <span className="flex shrink-0 gap-1.5">
+                  <button
+                    type="button"
                     disabled={busy}
-                    onClick={() => triage(item, { kind: "todo", due_date: todayInJst() })}
+                    onClick={() => triage(item, todayInJst())}
+                    className="border-wakuiro text-foreground/80 hover:bg-kinari rounded-lg border px-3 py-1 text-xs font-semibold"
                   >
                     今日
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="ghost"
+                  </button>
+                  <button
+                    type="button"
                     disabled={busy}
-                    onClick={() => triage(item, { kind: "todo", due_date: addDays(todayInJst(), 1) })}
+                    onClick={() => triage(item, addDays(todayInJst(), 1))}
+                    className="border-wakuiro text-foreground/80 hover:bg-kinari rounded-lg border px-3 py-1 text-xs font-semibold"
                   >
                     明日
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => triage(item, { kind: "todo" })}
-                  >
-                    ToDo
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => triage(item, { kind: "project" })}
-                  >
-                    Project
-                  </Button>
+                  </button>
                 </span>
               </li>
             );
           })}
         </ul>
       )}
+
+      <QuickAddInline placeholder="タスクや思いつきを入力…" onAdd={capture} />
+      <QuickAddFab placeholder="タスクや思いつきを入力…" onAdd={capture} />
     </section>
   );
 }
