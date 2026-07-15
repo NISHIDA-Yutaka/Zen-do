@@ -13,11 +13,15 @@
 ### 1. リポジトリを取得
 
 ```bash
-git clone <リモートのURL> zendo
+git clone https://github.com/NISHIDA-Yutaka/Zen-do.git zendo
 cd zendo
 ```
 
 （既にcloneしてある2回目以降は `git pull` で最新を取得）
+
+> **初回の認証**: push/pull時にブラウザが開いてGitHubのサインインを求められたら、パスキーでサインイン。
+> ユーザー名/パスワードを聞く古いダイアログが出た場合はGitが古すぎるサイン（GitHubはパスワード認証を廃止済み）。
+> `winget upgrade --id Git.Git` でGit本体を最新にすること（職場PCは2.23→2.55への更新で解決した実績あり）。
 
 ### 2. 依存パッケージをインストール
 
