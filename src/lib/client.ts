@@ -27,6 +27,10 @@ export function patchJson<T>(path: string, data: unknown): Promise<T> {
   return apiFetch<T>(path, { method: "PATCH", headers: jsonHeaders, body: JSON.stringify(data) });
 }
 
+// Inboxは状態ではなくビュー（docs/design.md 8章）。バッジと一覧で同じ条件を使う
+export const INBOX_QUERY =
+  "/api/items?kind=todo&status=todo&parent_id=null&is_memo=false&due_on=null";
+
 // Inbox件数バッジ（Nav）を別画面の変更に追従させるための軽量なイベント通知
 export const INBOX_CHANGED_EVENT = "zendo:inbox-changed";
 

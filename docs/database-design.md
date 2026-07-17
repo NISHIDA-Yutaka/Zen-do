@@ -8,7 +8,7 @@
 
 ## 1. 設計方針
 
-1. **単一テーブル継承**: Inbox項目 / Project / ToDo は1つの `items` テーブルに `kind` 列で同居させる。トリアージ（Inbox→ToDo等）が「行の複製」ではなく「kind列の更新」1回で済み、ToDo⇄Projectの昇格・降格も自由になるため
+1. **単一テーブル継承**: タスク(ToDo) / Project は1つの `items` テーブルに `kind` 列で同居させる（2026-07-16の統合により2種。docs/design.md 8章）。**Inboxは状態ではなくビュー**（`kind='todo' AND due_date IS NULL AND parent_id IS NULL AND is_memo=false AND status='todo'`）——「仕分け」は期日設定であり、kind遷移を伴わない。ToDo⇄Projectの昇格・降格はkind更新1回
 2. **習慣インスタンス＝ToDo行**: デイリープランナーが生成する「今日の習慣」は `items` テーブルの通常のToDo行（`habit_id` 付き）。Todayビュー・リマインダー・スワイプ操作などToDoの全機能をそのまま流用でき、実践ログは「habit_id付きToDo行の集合」から導出する（ログ専用テーブルとの二重管理を避ける）
 3. **DBアクセスはすべてNext.js API Routes経由**: クライアントはSupabaseと直接通信しない。理由: (a) 繰り返し完了時の次回生成などをサーバー側でアトミックに実行できる (b) 将来DBを乗り換えてもクライアントは無変更 (c) DB接続情報がブラウザに一切渡らない
 4. **タイムゾーンはJST固定**: 「今日」の境界判定・習慣の日付・ストリーク計算はすべて `Asia/Tokyo`（サーバー環境変数 `APP_TIMEZONE`）で行う。日本はDSTがないため単純化できる
@@ -50,17 +50,17 @@ items ──< reminders
 push_subscriptions（独立: Web Push購読端末）
 ```
 
-### 3.1 items（Inbox / Project / ToDo 共用）
+### 3.1 items（タスク / Project 共用）
 
 | 列 | 型 | 意味 |
 |---|---|---|
 | id | uuid PK | |
-| kind | enum: inbox / project / todo | トリアージはこの列の更新 |
+| kind | enum: project / todo | 2026-07-16に'inbox'を廃止（Inboxはビュー。docs/design.md 8章） |
 | title | text | |
 | notes | text | Markdown本文。デフォルト空文字 |
 | tags | text[] | 自由タグ。GINインデックス |
 | is_memo | boolean | Notesビューに出す「メモ」フラグ |
-| status | enum: todo / doing / done / dropped | |
+| status | enum: todo / done / dropped | 2026-07-16に'doing'を廃止（docs/design.md 7.5） |
 | parent_id | uuid → items | 親Project/親ToDo。親削除で子もカスケード削除 |
 | habit_id | uuid → habits | 習慣インスタンスの場合のみ。**(habit_id, due_date)で部分ユニーク**＝同じ習慣を同じ日に二重生成できない |
 | due_date | date | 期日（JSTの暦日） |
@@ -83,7 +83,7 @@ push_subscriptions（独立: Web Push購読端末）
 |---|---|---|
 | id | uuid PK | |
 | title / notes / tags | | itemsと同様 |
-| frequency_rule | jsonb | 5章参照。MVPは daily / weekly のみ |
+| frequency_rule | jsonb | 5章参照。daily / every_n_days / times_per_week の3種（2026-07-16刷新） |
 | default_reminder_rule | jsonb | インスタンス生成時に自動で付けるリマインダールール（6章の語彙。null可） |
 | is_paused | boolean | 一時停止中はプランナーに出ない・実践率の分母にも入れない |
 | sort_order | double precision | |
@@ -167,29 +167,28 @@ interval_days (from=completion):  今日(JST) + n
 
 ## 5. 習慣とデイリープランナー
 
-### 5.1 frequency_rule（MVP）
+### 5.1 frequency_rule（2026-07-16刷新。docs/design.md 10.1が正）
 
 ```jsonc
-{ "type": "daily" }                          // 毎日
-{ "type": "weekly", "weekdays": [1, 3, 5] }  // 曜日固定
+{ "type": "daily" }                    // 毎日
+{ "type": "every_n_days", "n": 3 }     // n日に1回
+{ "type": "times_per_week", "n": 3 }   // 週n回（週は月曜はじまり・JST）
 ```
 
-「週n回（曜日自由）」「n日に1回」はMVP対象外（spec.md 決定事項10）。
+曜日固定の語彙は廃止——暦固定ルーチンは繰り返しタスク（recurrence_rule）で作る棲み分け。
 
 ### 5.2 インスタンス化の流れ
 
-1. Todayビュー付属のデイリープランナーが「今日が該当日 かつ 未生成 かつ 非pause」の習慣を候補表示
+1. Todayビュー付属のデイリープランナーが「候補（下記）かつ 当日未生成 かつ 非pause」の習慣を表示。候補判定は**完了ログ依存**: daily=毎日 / every_n_days=最終完了からn日経過（実績ゼロなら毎日） / times_per_week=今週の完了数がn未満
 2. ユーザーがピックすると `items` に行を生成: `kind='todo', habit_id=習慣id, due_date=今日`。title/notes/tagsは習慣マスターからコピー、`default_reminder_rule` があればリマインダーも生成
 3. ピック解除＝その行を削除。「今日はやらない」＝ピックしない（行を作らない）だけ。**「やらなかった」ことを記録する操作は存在しない**（責めない設計）
 
 `(habit_id, due_date)` のユニーク制約により同日二重生成はDBレベルで不可能。
 
-### 5.3 実践ログ・継続率・ストリークの導出
+### 5.3 実践ログ・継続指標の導出
 
 - 実践ログ = `items where habit_id = X and status = 'done'` の due_date 集合
-- 該当日（分母）= frequency_rule が指す日（daily=毎日、weekly=指定曜日）
-- 実践率 = 直近4週間の該当日のうち done だった日の割合
-- ストリーク = 今日から遡って連続で「該当日をすべてdone」している日数（今日はその日が終わるまで未達成扱いにしない）
+- ストリーク・おやすみ救済・今週の進捗・直近4週の達成率の定義は **docs/design.md 10.2 が正**（すべて実践ログから導出、保存列は増やさない）
 
 **受容する不正確さ**: frequency_rule を変更したり pause した場合、過去分の分母も現在のルールで再計算される（ルール変更履歴は保持しない）。個人アプリでは許容し、問題になったら `habit_rule_history` を後付けする。
 
@@ -226,14 +225,16 @@ interval_days (from=completion):  今日(JST) + n
 
 ---
 
-## 7. Inboxとトリアージの遷移
+## 7. Inboxビューと仕分け（2026-07-16の統合後）
 
-| 遷移 | 実装 |
+**「inbox」というkind・状態・遷移は存在しない**（docs/design.md 8章）。Inbox画面は検索条件 `kind='todo' AND due_date IS NULL AND parent_id IS NULL AND is_memo=false AND status='todo'` のビュー。
+
+| 操作 | 実装 |
 |---|---|
-| キャプチャ | `items` に `kind='inbox'` で insert。Smart Inputが解釈した due_date/tags 等はこの時点で列に反映済み（プレビュー→確定を経るため）。オフライン時は `captured_raw` に生文字列を保持し、復帰後に再パース |
-| inbox → ToDo | `kind='todo'` に更新（＋不足情報の追記） |
-| inbox → Project | `kind='project'` に更新 |
-| inbox → 習慣 | `habits` に insert し、元のinbox行を削除（title/notes/tagsを移送） |
+| キャプチャ | `items` に `kind='todo'`・期日なしで insert → 定義によりInboxビューに現れる。Smart Inputが解釈した due_date/tags 等は insert 時点で列に反映済み（プレビュー→確定を経るため）。生文字列は `captured_raw` に保持 |
+| 仕分け（今日/明日） | `due_date` を設定するだけ → ビューから自然に消える |
+| 期日の✕クリア | `due_date` を null に → ビューに自然に現れる（特別な遷移ルールなし） |
+| Project化 | `kind='project'` に更新（詳細モーダルの「⋯→Projectに変換」） |
 | ToDo ⇄ Project | kind更新のみで昇格・降格可能（単一テーブルの利点） |
 
 ---

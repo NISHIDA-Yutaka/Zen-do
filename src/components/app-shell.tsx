@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { getJson, INBOX_CHANGED_EVENT } from "@/lib/client";
+import { getJson, INBOX_CHANGED_EVENT, INBOX_QUERY } from "@/lib/client";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [recentProjects, setRecentProjects] = useState<Item[]>([]);
 
   const refreshInboxCount = useCallback(() => {
-    getJson<{ items: Item[] }>("/api/items?kind=inbox")
+    getJson<{ items: Item[] }>(INBOX_QUERY)
       .then((r) => setInboxCount(r.items.length))
       .catch(() => {});
   }, []);

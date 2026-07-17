@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
 import { addDays, todayInJst } from "@/lib/date";
-import { getJson, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
+import { getJson, INBOX_QUERY, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
 import type { Item } from "@/lib/types";
 
 type ItemResult = { item: Item };
@@ -16,7 +16,7 @@ export function InboxView() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    getJson<ListResult>("/api/items?kind=inbox")
+    getJson<ListResult>(INBOX_QUERY)
       .then((r) => setItems(r.items))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -38,7 +38,8 @@ export function InboxView() {
     setBusyIds((prev) => new Set(prev).add(item.id));
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      await patchJson(`/api/items/${item.id}`, { kind: "todo", due_date: dueDate });
+      // 仕分け=期日を設定するだけ（kindは既にtodo。docs/design.md 8章）
+      await patchJson(`/api/items/${item.id}`, { due_date: dueDate });
       notifyInboxChanged();
     } catch (e) {
       setItems((prev) => [item, ...prev]);

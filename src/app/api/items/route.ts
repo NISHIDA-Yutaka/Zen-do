@@ -1,5 +1,5 @@
 // GET /api/items  — 一覧（クエリで絞り込み）
-// POST /api/items — 作成（クイックキャプチャ含む。既定 kind='inbox'）
+// POST /api/items — 作成（クイックキャプチャ含む。既定 kind='todo'）
 import type { NextRequest } from "next/server";
 import { badRequest, handle, json, parseBody } from "@/lib/api";
 import { db } from "@/lib/db";
@@ -27,8 +27,10 @@ export function GET(req: NextRequest): Promise<Response> {
     if (isMemo === "true") query = query.eq("is_memo", true);
     else if (isMemo === "false") query = query.eq("is_memo", false);
 
+    // due_on=null は「期日なし」を意味する（Inboxビュー等で使用）
     const dueOn = q.get("due_on");
-    if (dueOn) query = query.eq("due_date", dueOn);
+    if (dueOn === "null") query = query.is("due_date", null);
+    else if (dueOn) query = query.eq("due_date", dueOn);
 
     const dueBefore = q.get("due_before");
     if (dueBefore) query = query.lte("due_date", dueBefore);
@@ -58,12 +60,12 @@ export function POST(req: NextRequest): Promise<Response> {
     if (body.recurrence_rule && !dueDate) return badRequest("recurrence_rule には due_date が必要です");
 
     const insert = {
-      kind: body.kind ?? "inbox",
+      kind: body.kind ?? "todo",
       title: body.title,
       notes: body.notes ?? "",
       tags: body.tags ?? [],
       is_memo: body.is_memo ?? false,
-      status: body.status ?? "todo",
+      status: "todo" as const,
       parent_id: body.parent_id ?? null,
       due_date: dueDate,
       due_time: dueTime,

@@ -2,7 +2,7 @@
 // body: { date?: 'YYYY-MM-DD' }（既定は今日JSTの翌日）。postponed_count を+1し、相対リマインダーを再計算する。
 // weekly/monthly の繰り返し位相はルール自体が暦に固定されているため不変。
 import type { NextRequest } from "next/server";
-import { badRequest, handle, json, notFound, parseBody } from "@/lib/api";
+import { handle, json, notFound, parseBody } from "@/lib/api";
 import { addDays, todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { getItem, getReminders, recalcRelativeReminders } from "@/lib/items";
@@ -23,7 +23,6 @@ export function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
 
     const item = await getItem(id);
     if (!item) return notFound("item が見つかりません");
-    if (item.kind === "inbox") return badRequest("Inbox項目は先送りできません");
 
     const target = parsed.data.date ?? addDays(todayInJst(), 1);
 

@@ -1,8 +1,10 @@
 // Zendo ドメイン型。DBスキーマ（supabase/migrations）とセマンティクス（docs/database-design.md）に対応。
 // 日付は 'YYYY-MM-DD'（JSTの暦日）、時刻は 'HH:MM' または 'HH:MM:SS' の文字列で扱う。
 
-export type ItemKind = "inbox" | "project" | "todo";
-export type ItemStatus = "todo" | "doing" | "done" | "dropped";
+// kind は task(todo)/project の2種（docs/design.md 8章: Inboxは状態ではなくビュー）
+export type ItemKind = "project" | "todo";
+// 「着手中(doing)」は2026-07-16に廃止（docs/design.md 7.5）
+export type ItemStatus = "todo" | "done" | "dropped";
 
 // 繰り返しルール（docs/database-design.md 4.1）
 export type RecurrenceRule =
@@ -11,10 +13,11 @@ export type RecurrenceRule =
   | { type: "monthly_day"; day: number } // 1-31（短い月は月末クランプ）
   | { type: "interval_days"; n: number; from: "schedule" | "completion" };
 
-// 習慣の頻度ルール（docs/database-design.md 5.1、MVPは daily / weekly のみ）
+// 習慣の頻度ルール（docs/design.md 10.1: 柔軟頻度3種。曜日固定は繰り返しタスクで表現する）
 export type FrequencyRule =
   | { type: "daily" }
-  | { type: "weekly"; weekdays: number[] };
+  | { type: "every_n_days"; n: number }
+  | { type: "times_per_week"; n: number };
 
 // リマインダールール（docs/database-design.md 6.1）
 export type ReminderRule =

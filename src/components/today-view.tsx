@@ -259,7 +259,6 @@ function TaskMeta({ item, today }: { item: Item; today: string }) {
   const due = formatDueLabel(item.due_date, item.due_time, today);
   const chips: { text: string; tone: "beni" | "asagi" }[] = [];
   if (due?.late) chips.push({ text: "期限超過", tone: "beni" });
-  if (item.status === "doing") chips.push({ text: "着手中", tone: "asagi" });
   if (item.habit_id) chips.push({ text: "習慣", tone: "asagi" });
 
   return (

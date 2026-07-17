@@ -59,6 +59,11 @@ export function maxYmd(a: string, b: string): string {
   return a >= b ? a : b;
 }
 
+/** その日を含む週の月曜日（週n回習慣・カレンダーと同じ月曜はじまり）。 */
+export function weekStartMonday(ymd: string): string {
+  return addDays(ymd, -(isoWeekday(ymd) - 1));
+}
+
 /**
  * JSTの壁時計時刻（date='YYYY-MM-DD', time='HH:MM' or 'HH:MM:SS'）を
  * 絶対時刻（UTCのISO文字列）に変換する。remind_at の算出に使う。

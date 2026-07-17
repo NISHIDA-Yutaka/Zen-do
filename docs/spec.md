@@ -6,6 +6,9 @@
 > v0.2: 旧仕様書「Z-Tasks 総合仕様書」の内容をマージ。データモデルをProject/ToDo/Habitの3区分に再編。
 > v0.3: 技術スタック確定（Next.js + TypeScript + Tailwind/shadcn + Supabase Postgres）。実装フェーズへ移行。
 > v0.4: DB詳細設計を database-design.md として分離・確定。DBアクセスをAPI Routes経由に一本化。
+>
+> **注記（2026-07-17）**: データモデル（Inboxのビュー化・着手中の廃止）と習慣の頻度ルールは
+> **docs/design.md 8章/7.5/10章が正**。本書の旧記述（kind3区分・曜日固定習慣など）は歴史的経緯として残す。
 
 ---
 

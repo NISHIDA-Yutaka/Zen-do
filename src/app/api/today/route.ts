@@ -5,7 +5,7 @@
 import { handle, json } from "@/lib/api";
 import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
-import { frequencyMatchesDate } from "@/lib/frequency";
+import { isPlannerCandidate } from "@/lib/frequency";
 import type { Habit, Item } from "@/lib/types";
 
 export function GET(): Promise<Response> {
@@ -16,7 +16,7 @@ export function GET(): Promise<Response> {
       .from("items")
       .select("*")
       .eq("kind", "todo")
-      .in("status", ["todo", "doing"])
+      .eq("status", "todo")
       .lte("due_date", today)
       .order("due_date", { ascending: true })
       .order("sort_order", { ascending: true });
@@ -34,15 +34,28 @@ export function GET(): Promise<Response> {
     if (doneErr) throw new Error(doneErr.message);
     const done = (doneData ?? []) as Item[];
 
-    // 今日該当の非pause習慣
+    // 非pause習慣のうち、完了ログ由来の頻度判定（docs/design.md 10.1）で今日が候補のもの
     const { data: habitData, error: habitErr } = await db
       .from("habits")
       .select("*")
       .eq("is_paused", false);
     if (habitErr) throw new Error(habitErr.message);
-    const matching = (habitData as Habit[]).filter((h) =>
-      frequencyMatchesDate(h.frequency_rule, today),
-    );
+    const habits = (habitData ?? []) as Habit[];
+
+    // 完了ログ = 完了済み習慣インスタンスの due_date 集合（habit_idごと）
+    const { data: logData, error: logErr } = await db
+      .from("items")
+      .select("habit_id, due_date")
+      .eq("status", "done")
+      .not("habit_id", "is", null);
+    if (logErr) throw new Error(logErr.message);
+    const doneDatesByHabit = new Map<string, string[]>();
+    for (const r of (logData ?? []) as { habit_id: string; due_date: string | null }[]) {
+      if (!r.due_date) continue;
+      const arr = doneDatesByHabit.get(r.habit_id) ?? [];
+      arr.push(r.due_date);
+      doneDatesByHabit.set(r.habit_id, arr);
+    }
 
     // 今日分が既に生成済みの habit_id を除外
     const { data: todayInstances, error: instErr } = await db
@@ -54,7 +67,12 @@ export function GET(): Promise<Response> {
     const instantiated = new Set(
       (todayInstances ?? []).map((r) => (r as { habit_id: string }).habit_id),
     );
-    const habitCandidates = matching.filter((h) => !instantiated.has(h.id));
+
+    const habitCandidates = habits.filter(
+      (h) =>
+        !instantiated.has(h.id) &&
+        isPlannerCandidate(h.frequency_rule, today, doneDatesByHabit.get(h.id) ?? []),
+    );
 
     return json({ date: today, todos, habitCandidates, done });
   });

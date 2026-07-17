@@ -3,7 +3,7 @@
 // 手順は「次回生成 → 完了マーク」の順。generated_from の部分ユニークindexが二重生成を防ぐため、
 // 途中失敗して再試行されても重複しない（idempotent）。
 import type { NextRequest } from "next/server";
-import { badRequest, handle, json, notFound } from "@/lib/api";
+import { handle, json, notFound } from "@/lib/api";
 import { db } from "@/lib/db";
 import { getItem, getReminders, insertReminders } from "@/lib/items";
 import { isRelativeReminderRule, resolveRemindAt } from "@/lib/reminders";
@@ -18,7 +18,6 @@ export function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
     const { id } = await ctx.params;
     const item = await getItem(id);
     if (!item) return notFound("item が見つかりません");
-    if (item.kind === "inbox") return badRequest("Inbox項目は完了できません。先に仕分けしてください");
 
     // 既に完了済みなら冪等に返す（次回は既存の生成分を探す）
     if (item.status === "done") {

@@ -26,13 +26,11 @@ export const recurrenceRuleSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-// --- 習慣の頻度ルール（MVPは daily / weekly のみ） ---
+// --- 習慣の頻度ルール（docs/design.md 10.1: 柔軟頻度3種） ---
 export const frequencyRuleSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("daily") }),
-  z.object({
-    type: z.literal("weekly"),
-    weekdays: z.array(z.number().int().min(1).max(7)).min(1),
-  }),
+  z.object({ type: z.literal("every_n_days"), n: z.number().int().min(2).max(365) }),
+  z.object({ type: z.literal("times_per_week"), n: z.number().int().min(1).max(7) }),
 ]);
 
 // --- リマインダールール ---
@@ -43,14 +41,13 @@ export const reminderRuleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("before_due_minutes"), minutes: z.number().int().min(1) }),
 ]);
 
-// --- Item 作成 ---
+// --- Item 作成（statusは常にtodoで生まれるため受け付けない） ---
 export const createItemSchema = z.object({
-  kind: z.enum(["inbox", "project", "todo"]).optional(),
+  kind: z.enum(["project", "todo"]).optional(),
   title: z.string().min(1, "タイトルは必須です"),
   notes: z.string().optional(),
   tags: z.array(z.string()).optional(),
   is_memo: z.boolean().optional(),
-  status: z.enum(["todo", "doing"]).optional(),
   parent_id: z.string().uuid().nullable().optional(),
   due_date: dateString.nullable().optional(),
   due_time: timeString.nullable().optional(),
@@ -61,12 +58,12 @@ export const createItemSchema = z.object({
 
 // --- Item 更新（全項目任意）。status に 'done' は含めない（完了は /complete 経由） ---
 export const updateItemSchema = z.object({
-  kind: z.enum(["inbox", "project", "todo"]).optional(),
+  kind: z.enum(["project", "todo"]).optional(),
   title: z.string().min(1).optional(),
   notes: z.string().optional(),
   tags: z.array(z.string()).optional(),
   is_memo: z.boolean().optional(),
-  status: z.enum(["todo", "doing", "dropped"]).optional(),
+  status: z.enum(["todo", "dropped"]).optional(),
   parent_id: z.string().uuid().nullable().optional(),
   due_date: dateString.nullable().optional(),
   due_time: timeString.nullable().optional(),

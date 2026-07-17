@@ -6,6 +6,7 @@ import {
   jstWallClockToIso,
   maxYmd,
   todayInJst,
+  weekStartMonday,
 } from "@/lib/date";
 
 describe("todayInJst", () => {
@@ -63,6 +64,18 @@ describe("maxYmd", () => {
   it("遅い方を返す", () => {
     expect(maxYmd("2026-07-14", "2026-07-15")).toBe("2026-07-15");
     expect(maxYmd("2026-07-15", "2026-07-14")).toBe("2026-07-15");
+  });
+});
+
+describe("weekStartMonday", () => {
+  it("木曜(2026-07-16) → その週の月曜(07-13)", () => {
+    expect(weekStartMonday("2026-07-16")).toBe("2026-07-13");
+  });
+  it("月曜は当日を返す", () => {
+    expect(weekStartMonday("2026-07-13")).toBe("2026-07-13");
+  });
+  it("日曜は6日前の月曜を返す", () => {
+    expect(weekStartMonday("2026-07-19")).toBe("2026-07-13");
   });
 });
 
