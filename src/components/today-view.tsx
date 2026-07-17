@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
 import { getJson, postJson } from "@/lib/client";
 import { formatDueLabel } from "@/lib/format";
@@ -25,14 +26,19 @@ export function TodayView() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getJson<TodayData>("/api/today")
       .then(setData)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -161,7 +167,13 @@ export function TodayView() {
               onClick={() => complete(item)}
               className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
             />
-            <TaskMeta item={item} today={data.date} />
+            <button
+              type="button"
+              onClick={() => setOpenId(item.id)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <TaskMeta item={item} today={data.date} />
+            </button>
             <button
               type="button"
               disabled={busyIds.has(item.id)}
@@ -236,6 +248,16 @@ export function TodayView() {
 
       <QuickAddFab placeholder="タスクを追加…" onAdd={addTodo} />
 
+      {openId && (
+        <ItemModal
+          itemId={openId}
+          onClose={() => {
+            setOpenId(null);
+            load();
+          }}
+        />
+      )}
+
       {toast && (
         <output className="bg-foreground text-background fixed inset-x-4 bottom-20 z-30 mx-auto flex max-w-md items-center justify-between rounded-xl px-4 py-3 text-xs shadow-2xl md:bottom-8">
           <span className="min-w-0 truncate">「{toast.title}」を完了しました</span>
@@ -262,7 +284,7 @@ function TaskMeta({ item, today }: { item: Item; today: string }) {
   if (item.habit_id) chips.push({ text: "習慣", tone: "asagi" });
 
   return (
-    <span className="min-w-0 flex-1">
+    <span className="block min-w-0">
       <span className="block truncate text-sm font-medium">{item.title}</span>
       {(due || chips.length > 0) && (
         <span className="mt-0.5 flex items-center gap-2">

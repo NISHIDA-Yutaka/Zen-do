@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
 import { addDays, todayInJst } from "@/lib/date";
 import { getJson, INBOX_QUERY, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
@@ -14,13 +15,18 @@ export function InboxView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getJson<ListResult>(INBOX_QUERY)
       .then((r) => setItems(r.items))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function capture(title: string) {
     setError(null);
@@ -72,7 +78,13 @@ export function InboxView() {
             const busy = busyIds.has(item.id);
             return (
               <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpenId(item.id)}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+                >
+                  {item.title}
+                </button>
                 <span className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
@@ -99,6 +111,17 @@ export function InboxView() {
 
       <QuickAddInline placeholder="タスクや思いつきを入力…" onAdd={capture} />
       <QuickAddFab placeholder="タスクや思いつきを入力…" onAdd={capture} />
+
+      {openId && (
+        <ItemModal
+          itemId={openId}
+          onClose={() => {
+            setOpenId(null);
+            load();
+            notifyInboxChanged();
+          }}
+        />
+      )}
     </section>
   );
 }

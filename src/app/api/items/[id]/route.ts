@@ -1,4 +1,4 @@
-// GET    /api/items/[id] — 単体取得（reminders・子ToDo付き）
+// GET    /api/items/[id] — 単体取得（reminders・子ToDo・親付き）
 // PATCH  /api/items/[id] — 更新（トリアージ=kind変更、期日変更時はリマインダー再計算）
 // DELETE /api/items/[id] — 削除（子・リマインダーはFKでカスケード）
 import type { NextRequest } from "next/server";
@@ -28,10 +28,14 @@ export function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
       .from("items")
       .select("*")
       .eq("parent_id", id)
-      .order("sort_order", { ascending: true });
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
 
-    return json({ item, reminders, children: children ?? [] });
+    // 親（プロジェクト行の表示用）
+    const parent = item.parent_id ? await getItem(item.parent_id) : null;
+
+    return json({ item, reminders, children: children ?? [], parent });
   });
 }
 
