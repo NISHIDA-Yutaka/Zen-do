@@ -93,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           type="button"
           aria-label="メニューを開く"
           onClick={() => setDrawerOpen(true)}
-          className="border-wakuiro bg-background text-nibi hover:text-foreground flex size-9 items-center justify-center rounded-lg border text-base"
+          className="border-wakuiro bg-background text-nibi hover:text-foreground hit flex size-9 items-center justify-center rounded-lg border text-base"
         >
           ☰
         </button>
@@ -157,7 +157,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "relative flex items-center gap-1 px-2 py-1 text-xs",
+                "hit-y relative flex items-center gap-1 px-2 py-1 text-xs",
                 active
                   ? "text-foreground after:bg-mikan font-bold after:absolute after:-bottom-1 after:left-1/2 after:h-0.5 after:w-4 after:-translate-x-1/2 after:rounded-full after:content-['']"
                   : "text-nibi",

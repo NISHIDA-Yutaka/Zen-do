@@ -159,14 +159,14 @@ export function TodayView() {
               aria-label={`${item.title}を完了`}
               disabled={busyIds.has(item.id)}
               onClick={() => complete(item)}
-              className="border-wakuiro hover:border-tokiwa size-6 shrink-0 rounded-full border-[1.75px]"
+              className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
             />
             <TaskMeta item={item} today={data.date} />
             <button
               type="button"
               disabled={busyIds.has(item.id)}
               onClick={() => postpone(item)}
-              className="text-nibi hover:text-foreground shrink-0 text-xs"
+              className="text-nibi hover:text-foreground hit shrink-0 text-xs"
             >
               明日へ
             </button>
@@ -181,7 +181,7 @@ export function TodayView() {
           <button
             type="button"
             onClick={() => setDoneOpen((v) => !v)}
-            className="text-nibi flex items-center gap-1.5 text-xs"
+            className="text-nibi hit flex items-center gap-1.5 text-xs"
           >
             <span className="text-tokiwa font-bold">✓</span>
             完了済み {data.done.length}件 {doneOpen ? "▾" : "▸"}
@@ -195,7 +195,7 @@ export function TodayView() {
                     aria-label={`${item.title}の完了を取り消す`}
                     disabled={busyIds.has(item.id)}
                     onClick={() => uncomplete(item)}
-                    className="bg-tokiwa flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                    className="bg-tokiwa hit flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                   >
                     ✓
                   </button>
@@ -224,7 +224,7 @@ export function TodayView() {
                   type="button"
                   disabled={busyIds.has(habit.id)}
                   onClick={() => pickHabit(habit)}
-                  className="text-mikan text-xs font-bold"
+                  className="text-mikan hit text-xs font-bold"
                 >
                   ＋ 追加
                 </button>
@@ -245,7 +245,7 @@ export function TodayView() {
               const done = data.done.find((t) => t.id === toast.itemId);
               if (done) void uncomplete(done);
             }}
-            className="text-mikan ml-3 shrink-0 font-bold"
+            className="text-mikan hit ml-3 shrink-0 font-bold"
           >
             取り消す
           </button>

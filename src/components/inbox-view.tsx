@@ -78,7 +78,7 @@ export function InboxView() {
                     type="button"
                     disabled={busy}
                     onClick={() => triage(item, todayInJst())}
-                    className="border-wakuiro text-foreground/80 hover:bg-kinari rounded-lg border px-3 py-1 text-xs font-semibold"
+                    className="border-wakuiro text-foreground/80 hover:bg-kinari hit-y rounded-lg border px-3 py-1 text-xs font-semibold"
                   >
                     今日
                   </button>
@@ -86,7 +86,7 @@ export function InboxView() {
                     type="button"
                     disabled={busy}
                     onClick={() => triage(item, addDays(todayInJst(), 1))}
-                    className="border-wakuiro text-foreground/80 hover:bg-kinari rounded-lg border px-3 py-1 text-xs font-semibold"
+                    className="border-wakuiro text-foreground/80 hover:bg-kinari hit-y rounded-lg border px-3 py-1 text-xs font-semibold"
                   >
                     明日
                   </button>

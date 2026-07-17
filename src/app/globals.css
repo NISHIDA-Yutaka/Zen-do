@@ -160,4 +160,32 @@
   html {
     @apply font-sans;
   }
+  /* クリック可能要素は指カーソル（docs/design.md 2章。Tailwind v4のpreflightはbuttonがcursor:default） */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a,
+  label,
+  summary {
+    cursor: pointer;
+  }
+}
+
+/* 当たり判定の拡大（docs/design.md 2章: 最小44px目安・見た目は変えない）。
+   疑似要素で不可視のクリック領域を広げる。hit=全方向 / hit-y=上下のみ（隣接ボタンの誤タップ防止用）。
+   ::after はナビのアクティブ下線等で使用済みのため ::before を使う */
+@utility hit {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: calc(var(--spacing) * -2.5);
+  }
+}
+@utility hit-y {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: calc(var(--spacing) * -2.5) 0;
+  }
 }
