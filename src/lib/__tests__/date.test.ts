@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   clampDayToMonth,
+  diffDays,
   isoWeekday,
   jstWallClockToIso,
   maxYmd,
@@ -64,6 +65,18 @@ describe("maxYmd", () => {
   it("遅い方を返す", () => {
     expect(maxYmd("2026-07-14", "2026-07-15")).toBe("2026-07-15");
     expect(maxYmd("2026-07-15", "2026-07-14")).toBe("2026-07-15");
+  });
+});
+
+describe("diffDays", () => {
+  it("同日は0", () => {
+    expect(diffDays("2026-07-16", "2026-07-16")).toBe(0);
+  });
+  it("後日は正", () => {
+    expect(diffDays("2026-07-13", "2026-07-16")).toBe(3);
+  });
+  it("月をまたぐ", () => {
+    expect(diffDays("2026-06-29", "2026-07-16")).toBe(17);
   });
 });
 

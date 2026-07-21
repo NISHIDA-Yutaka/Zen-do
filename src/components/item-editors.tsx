@@ -17,7 +17,7 @@ const WEEKDAYS = [
   { n: 7, label: "日" },
 ];
 
-function SegButton({
+export function SegButton({
   on,
   onClick,
   children,
@@ -43,7 +43,7 @@ function SegButton({
   );
 }
 
-function Stepper({
+export function Stepper({
   value,
   min,
   max,

@@ -64,6 +64,15 @@ export function weekStartMonday(ymd: string): string {
   return addDays(ymd, -(isoWeekday(ymd) - 1));
 }
 
+/** b - a を日数で返す（同日=0、bが後なら正）。 */
+export function diffDays(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  const au = Date.UTC(ay, am - 1, ad);
+  const bu = Date.UTC(by, bm - 1, bd);
+  return Math.round((bu - au) / 86_400_000);
+}
+
 /**
  * JSTの壁時計時刻（date='YYYY-MM-DD', time='HH:MM' or 'HH:MM:SS'）を
  * 絶対時刻（UTCのISO文字列）に変換する。remind_at の算出に使う。
