@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
+import { TaskMeta } from "@/components/task-meta";
 import { getJson, postJson } from "@/lib/client";
-import { formatDueLabel } from "@/lib/format";
 import type { Habit, Item } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 type TodayData = { date: string; todos: Item[]; habitCandidates: Habit[]; done: Item[] };
 type ItemResult = { item: Item };
@@ -281,35 +280,3 @@ export function TodayView() {
   );
 }
 
-function TaskMeta({ item, today }: { item: Item; today: string }) {
-  const due = formatDueLabel(item.due_date, item.due_time, today);
-  const chips: { text: string; tone: "beni" | "asagi" }[] = [];
-  if (due?.late) chips.push({ text: "期限超過", tone: "beni" });
-  if (item.habit_id) chips.push({ text: "習慣", tone: "asagi" });
-
-  return (
-    <span className="block min-w-0">
-      <span className="block truncate text-sm font-medium">{item.title}</span>
-      {(due || chips.length > 0) && (
-        <span className="mt-0.5 flex items-center gap-2">
-          {due && (
-            <span className={cn("text-[11px]", due.late ? "text-beni font-semibold" : "text-nibi")}>
-              {due.text}
-            </span>
-          )}
-          {chips.map((c) => (
-            <span
-              key={c.text}
-              className={cn(
-                "rounded-full px-2 py-px text-[10.5px] font-semibold",
-                c.tone === "beni" ? "bg-beni-soft text-beni" : "bg-asagi-soft text-asagi",
-              )}
-            >
-              {c.text}
-            </span>
-          ))}
-        </span>
-      )}
-    </span>
-  );
-}

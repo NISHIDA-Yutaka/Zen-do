@@ -35,6 +35,10 @@ export function GET(req: NextRequest): Promise<Response> {
     const dueBefore = q.get("due_before");
     if (dueBefore) query = query.lte("due_date", dueBefore);
 
+    // due_after は「この先の予定」用（docs/design.md 12.5）
+    const dueAfter = q.get("due_after");
+    if (dueAfter) query = query.gt("due_date", dueAfter);
+
     const tag = q.get("tag");
     if (tag) query = query.contains("tags", [tag]);
 
