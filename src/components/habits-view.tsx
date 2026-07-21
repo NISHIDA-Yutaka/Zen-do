@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { HabitModal } from "@/components/habit-modal";
-import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
+import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import type { HabitRow } from "@/app/api/habits/route";
 import type { HabitStats } from "@/lib/habit-stats";
 import { getJson, postJson } from "@/lib/client";
@@ -58,10 +58,11 @@ export function HabitsView() {
     }
   }
 
-  async function addHabit(title: string) {
+  // この画面はプレーン入力（Smart Inputの適用外。docs/design.md 11.1）
+  async function addHabit(payload: QuickAddPayload) {
     setError(null);
     try {
-      await postJson("/api/habits", { title, frequency_rule: { type: "daily" } });
+      await postJson("/api/habits", { title: payload.title, frequency_rule: { type: "daily" } });
       load();
     } catch (e) {
       setError((e as Error).message);

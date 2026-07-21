@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ItemModal } from "@/components/item-modal";
-import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
+import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import type { ProjectRow } from "@/app/api/projects/route";
 import { getJson, postJson } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
@@ -33,10 +33,11 @@ export function ProjectsView() {
     load();
   }, [load]);
 
-  async function addProject(title: string) {
+  // この画面はプレーン入力（Smart Inputの適用外。docs/design.md 11.1）
+  async function addProject(payload: QuickAddPayload) {
     setError(null);
     try {
-      await postJson("/api/items", { kind: "project", title });
+      await postJson("/api/items", { kind: "project", title: payload.title });
       load();
     } catch (e) {
       setError((e as Error).message);

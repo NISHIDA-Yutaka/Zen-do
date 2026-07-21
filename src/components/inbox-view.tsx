@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ItemModal } from "@/components/item-modal";
-import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
+import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { addDays, todayInJst } from "@/lib/date";
 import { getJson, INBOX_QUERY, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
 import type { Item } from "@/lib/types";
@@ -28,11 +28,13 @@ export function InboxView() {
     load();
   }, [load]);
 
-  async function capture(title: string) {
+  // 日付トークンがあれば期日つきで作成＝Inboxビューには残らない（docs/design.md 11.4）
+  async function capture(payload: QuickAddPayload) {
     setError(null);
     try {
-      const { item } = await postJson<ItemResult>("/api/items", { title });
-      setItems((prev) => [item, ...prev]);
+      const { item } = await postJson<ItemResult>("/api/items", payload);
+      if (item.due_date === null && item.parent_id === null) setItems((prev) => [item, ...prev]);
+      else load();
       notifyInboxChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -109,8 +111,8 @@ export function InboxView() {
         </ul>
       )}
 
-      <QuickAddInline placeholder="タスクや思いつきを入力…" onAdd={capture} />
-      <QuickAddFab placeholder="タスクや思いつきを入力…" onAdd={capture} />
+      <QuickAddInline placeholder="タスクや思いつきを入力…" onAdd={capture} smart />
+      <QuickAddFab placeholder="タスクや思いつきを入力…" onAdd={capture} smart />
 
       {openId && (
         <ItemModal

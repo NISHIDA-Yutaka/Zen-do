@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ItemModal } from "@/components/item-modal";
-import { QuickAddFab, QuickAddInline } from "@/components/quick-add";
+import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { getJson, postJson } from "@/lib/client";
 import { formatDueLabel } from "@/lib/format";
 import type { Habit, Item } from "@/lib/types";
@@ -130,16 +130,15 @@ export function TodayView() {
     }
   }
 
-  async function addTodo(title: string) {
+  // Smart Inputの解釈結果をそのまま反映。日付トークンがなければ今日（docs/design.md 11.4）
+  async function addTodo(payload: QuickAddPayload) {
     if (!data) return;
     setError(null);
     try {
-      const { item } = await postJson<ItemResult>("/api/items", {
-        kind: "todo",
-        title,
-        due_date: data.date,
-      });
-      setData((d) => (d ? { ...d, todos: [...d.todos, item] } : d));
+      const { item } = await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
+      // 解釈された期日が今日以外なら、この画面には出ないので再読込で整合を取る
+      if (item.due_date === data.date) setData((d) => (d ? { ...d, todos: [...d.todos, item] } : d));
+      else load();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -186,7 +185,12 @@ export function TodayView() {
         ))}
       </ul>
 
-      <QuickAddInline placeholder="タスクを追加…（今日の予定として入る）" onAdd={addTodo} />
+      <QuickAddInline
+        placeholder="タスクを追加…（今日の予定として入る）"
+        onAdd={addTodo}
+        smart
+        defaultDueDate={data.date}
+      />
 
       {data.done.length > 0 && (
         <div className="pt-3">
@@ -246,7 +250,7 @@ export function TodayView() {
         </section>
       )}
 
-      <QuickAddFab placeholder="タスクを追加…" onAdd={addTodo} />
+      <QuickAddFab placeholder="タスクを追加…" onAdd={addTodo} smart defaultDueDate={data.date} />
 
       {openId && (
         <ItemModal
