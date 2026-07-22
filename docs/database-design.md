@@ -8,7 +8,7 @@
 
 ## 1. 設計方針
 
-1. **単一テーブル継承**: タスク(ToDo) / Project は1つの `items` テーブルに `kind` 列で同居させる（2026-07-16の統合により2種。docs/design.md 8章）。**Inboxは状態ではなくビュー**（`kind='todo' AND due_date IS NULL AND parent_id IS NULL AND is_memo=false AND status='todo'`）——「仕分け」は期日設定であり、kind遷移を伴わない。ToDo⇄Projectの昇格・降格はkind更新1回
+1. **単一テーブル継承**: タスク(ToDo) / Project は1つの `items` テーブルに `kind` 列で同居させる（2026-07-16の統合により2種。docs/design.md 8章）。**Inboxは状態ではなくビュー**（`kind='todo' AND due_date IS NULL AND parent_id IS NULL AND NOT tags @> '{memo}' AND status='todo'`）——「仕分け」は期日設定であり、kind遷移を伴わない。ToDo⇄Projectの昇格・降格はkind更新1回
 2. **習慣インスタンス＝ToDo行**: デイリープランナーが生成する「今日の習慣」は `items` テーブルの通常のToDo行（`habit_id` 付き）。Todayビュー・リマインダー・スワイプ操作などToDoの全機能をそのまま流用でき、実践ログは「habit_id付きToDo行の集合」から導出する（ログ専用テーブルとの二重管理を避ける）
 3. **DBアクセスはすべてNext.js API Routes経由**: クライアントはSupabaseと直接通信しない。理由: (a) 繰り返し完了時の次回生成などをサーバー側でアトミックに実行できる (b) 将来DBを乗り換えてもクライアントは無変更 (c) DB接続情報がブラウザに一切渡らない
 4. **タイムゾーンはJST固定**: 「今日」の境界判定・習慣の日付・ストリーク計算はすべて `Asia/Tokyo`（サーバー環境変数 `APP_TIMEZONE`）で行う。日本はDSTがないため単純化できる
@@ -58,8 +58,7 @@ push_subscriptions（独立: Web Push購読端末）
 | kind | enum: project / todo | 2026-07-16に'inbox'を廃止（Inboxはビュー。docs/design.md 8章） |
 | title | text | |
 | notes | text | Markdown本文。デフォルト空文字 |
-| tags | text[] | 自由タグ。GINインデックス |
-| is_memo | boolean | Notesビューに出す「メモ」フラグ |
+| tags | text[] | 自由タグ。GINインデックス。**`memo` タグはNotesビューの表示条件を兼ねる**（docs/design.md 13.1） |
 | status | enum: todo / done / dropped | 2026-07-16に'doing'を廃止（docs/design.md 7.5） |
 | parent_id | uuid → items | 親Project/親ToDo。親削除で子もカスケード削除 |
 | habit_id | uuid → habits | 習慣インスタンスの場合のみ。**(habit_id, due_date)で部分ユニーク**＝同じ習慣を同じ日に二重生成できない |
@@ -73,9 +72,9 @@ push_subscriptions（独立: Web Push購読端末）
 | captured_raw | text | オフラインキャプチャ時の生入力。オンライン復帰後の再パース用 |
 | created_at / updated_at | timestamptz | updated_atはトリガーで自動更新 |
 
-**is_memo をタグではなく専用列にした理由**: タグ`#memo`方式だとタイプミスや改名でメモが「行方不明」になる事故が起きうる。ビューの表示条件に使う属性は構造化しておく（spec.md 5章の❓を解消）。
+**メモは専用列ではなく `memo` タグで表す**（2026-07-22変更・マイグレーション `20260722000001_memo_as_tag.sql` で `is_memo` 列を削除）。旧設計は「タグ方式はタイプミスでメモが行方不明になる」として専用列 `is_memo` を採用していたが、**実体とUIが1つ減るシンプルさを優先**してタグ方式に戻した。誤字は詳細モーダルのタグチップで目視でき、Notes空表示にも案内文を出す（docs/design.md 13.1）。
 
-**メモに期日を付けた場合**: そのままTodayビューにも出る。「この日に見返したいメモ」として機能するので許容（むしろ便利）。
+**メモに期日を付けた場合**: そのままTodayビュー・「この先の予定」にも出る。「この日に見返したいメモ」として機能するので許容（むしろ便利）。完了するまでNotesにも残る。
 
 ### 3.2 habits（習慣マスター）
 
@@ -227,7 +226,7 @@ interval_days (from=completion):  今日(JST) + n
 
 ## 7. Inboxビューと仕分け（2026-07-16の統合後）
 
-**「inbox」というkind・状態・遷移は存在しない**（docs/design.md 8章）。Inbox画面は検索条件 `kind='todo' AND due_date IS NULL AND parent_id IS NULL AND is_memo=false AND status='todo'` のビュー。
+**「inbox」というkind・状態・遷移は存在しない**（docs/design.md 8章）。Inbox画面は検索条件 `kind='todo' AND due_date IS NULL AND parent_id IS NULL AND NOT tags @> '{memo}' AND status='todo'` のビュー。
 
 | 操作 | 実装 |
 |---|---|

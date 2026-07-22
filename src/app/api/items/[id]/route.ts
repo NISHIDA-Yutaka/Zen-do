@@ -64,7 +64,6 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       "title",
       "notes",
       "tags",
-      "is_memo",
       "status",
       "parent_id",
       "due_date",

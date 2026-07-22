@@ -23,10 +23,6 @@ export function GET(req: NextRequest): Promise<Response> {
     if (parentId === "null") query = query.is("parent_id", null);
     else if (parentId) query = query.eq("parent_id", parentId);
 
-    const isMemo = q.get("is_memo");
-    if (isMemo === "true") query = query.eq("is_memo", true);
-    else if (isMemo === "false") query = query.eq("is_memo", false);
-
     // due_on=null は「期日なし」を意味する（Inboxビュー等で使用）
     const dueOn = q.get("due_on");
     if (dueOn === "null") query = query.is("due_date", null);
@@ -41,6 +37,10 @@ export function GET(req: NextRequest): Promise<Response> {
 
     const tag = q.get("tag");
     if (tag) query = query.contains("tags", [tag]);
+
+    // exclude_tag は Inboxから #memo を外すためのもの（docs/design.md 13.2）
+    const excludeTag = q.get("exclude_tag");
+    if (excludeTag) query = query.not("tags", "cs", `{${excludeTag}}`);
 
     query = query.order("sort_order", { ascending: true }).order("created_at", { ascending: true });
 
@@ -68,7 +68,6 @@ export function POST(req: NextRequest): Promise<Response> {
       title: body.title,
       notes: body.notes ?? "",
       tags: body.tags ?? [],
-      is_memo: body.is_memo ?? false,
       status: "todo" as const,
       parent_id: body.parent_id ?? null,
       due_date: dueDate,

@@ -31,8 +31,8 @@ export interface Item {
   kind: ItemKind;
   title: string;
   notes: string;
+  // メモは #memo タグ付きタスクとして表現する（docs/design.md 13.1。旧 is_memo 列は廃止）
   tags: string[];
-  is_memo: boolean;
   status: ItemStatus;
   parent_id: string | null;
   habit_id: string | null;
