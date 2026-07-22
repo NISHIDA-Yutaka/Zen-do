@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DuePicker } from "@/components/due-picker";
 import { ProjectPicker, RecurrenceEditor, ReminderEditor } from "@/components/item-editors";
+import { PushNotice } from "@/components/push-notice";
 import { deleteJson, getJson, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { formatDueFull, formatRecurrenceRule } from "@/lib/format";
@@ -316,6 +317,7 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
                       onSave={saveReminders}
                     />
                   </FieldRow>
+                  <PushNotice show={(detail?.reminders ?? []).length > 0} />
                 </>
               )}
 

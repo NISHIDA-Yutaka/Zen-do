@@ -207,20 +207,28 @@ interval_days (from=completion):  今日(JST) + n
 - 作成時に rule → `remind_at`（絶対時刻）へ解決して保存。**due_date/due_time を変更したら、そのitemの相対ルールのリマインダーを全て再計算する**（サーバー側の更新処理に組み込む）
 - 1つのitemに複数リマインダー可（例: 前日20時 + 当日朝8時 + 1時間前）
 
-### 6.2 配信（ディスパッチャ）
+### 6.2 配信（ディスパッチャ・実装済み）
+
+実装は `src/app/api/cron/reminders/route.ts` と `src/lib/push-dispatch.ts` / `src/lib/push-send.ts`。UI側も含めた全体は docs/design.md 15章。
 
 ```
 外部cron --毎分--> GET /api/cron/reminders (Bearer CRON_SECRET)
-  1. UPDATE reminders SET sent_at = now()
-     WHERE sent_at IS NULL AND coalesce(snoozed_until, remind_at) <= now()
-     RETURNING *      ← 先にマークしてから送る（at-most-once。二重通知より取りこぼしの方がマシ…ではないが、
-                         毎分pollなので実質的な取りこぼし窓は極小。リトライ列の追加は将来課題）
-  2. 各 push_subscriptions へ web-push 送信
-  3. 失敗した購読は failed_count+1、連続5回で購読行を削除
+  1. 発火対象を取得: sent_at IS NULL AND coalesce(snoozed_until, remind_at) <= now()
+  2. 先に sent_at をマークして所有権を取る（at-most-once。取れた行だけが自分の担当なので
+     多重起動しても二重送信しない。リトライ列の追加は将来課題）
+  3. 親アイテムを引いて仕分け → 下記の3条件は送らずに捨てる
+  4. 各 push_subscriptions へ web-push 送信
+  5. 404/410 の購読は即削除、その他の失敗は failed_count+1、5回で削除
 ```
 
+**送らずに捨てる条件**（`sent_at` は埋めるので再評価されない）:
+
+- 親アイテムが `status != 'todo'`（**完了・破棄したタスクの通知が後から鳴るのを防ぐ**。`complete`/`drop` 側はリマインダーを触らず、判定をここに集約している）
+- 親アイテムが存在しない
+- 発火予定が24時間以上前（cron停止からの復帰時に古い通知が一斉に鳴るのを防ぐ）
+
 - **インフラ注意**: Vercel Hobby プランのcronは実行頻度が粗い（分単位の定期実行に使えない）ため、外部の無料cronサービス（cron-job.org 等、1分間隔可）からAPIを叩く構成にする。Supabase pg_cron はベンダー結合になるため使わない（ポータビリティ方針）
-- スヌーズ: `snoozed_until` を設定し `sent_at` をnullに戻す → 次のpollで再発火。プリセットは「1時間後」「明日の朝（9:00）」＋任意時刻
+- スヌーズ: `snoozed_until` を設定し `sent_at` をnullに戻す → 次のpollで再発火。**ディスパッチャは対応済みだがUIは保留**（design.md 15.6）
 
 ---
 

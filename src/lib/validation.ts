@@ -94,3 +94,15 @@ export const updateHabitSchema = z.object({
 export const instantiateHabitSchema = z.object({
   date: dateString.optional(),
 });
+
+// --- Web Push 購読（docs/design.md 15章） ---
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url("endpoint はURLである必要があります"),
+  p256dh: z.string().min(1),
+  auth: z.string().min(1),
+  user_agent: z.string().nullable().optional(),
+});
+
+export const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url(),
+});

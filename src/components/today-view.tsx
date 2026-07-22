@@ -18,14 +18,15 @@ function formatHeading(ymd: string): string {
   return `${m}月${d}日（${youbi}）`;
 }
 
-export function TodayView() {
+export function TodayView({ initialItemId = null }: { initialItemId?: string | null }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // 通知タップで /today?item=<id> に着地したら、そのタスクの詳細を開いた状態で始める
+  const [openId, setOpenId] = useState<string | null>(initialItemId);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
@@ -256,6 +257,8 @@ export function TodayView() {
           itemId={openId}
           onClose={() => {
             setOpenId(null);
+            // 通知から来た ?item= を消す（リロードで再び開かないように）
+            if (window.location.search) window.history.replaceState(null, "", "/today");
             load();
           }}
         />
