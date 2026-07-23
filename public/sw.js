@@ -4,11 +4,17 @@
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+// インストール可能性のために fetch ハンドラを1つ持たせる。
+// respondWith を呼ばず素通しするだけ＝オフラインキャッシュはしない（docs/design.md 16章）。
+self.addEventListener("fetch", () => {});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   const data = event.data.json();
   const options = {
     body: data.body,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/badge-72.png",
     // 同じタスクの通知は上書きする。renotify で再通知時もちゃんと鳴らす
     tag: data.tag,
     renotify: true,

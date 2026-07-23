@@ -35,6 +35,20 @@ async function registration(): Promise<ServiceWorkerRegistration> {
   return navigator.serviceWorker.register(SW_PATH, { scope: "/", updateViaCache: "none" });
 }
 
+/**
+ * アプリ起動時のSW登録（docs/design.md 16章）。通知の許可は求めない。
+ * SWが稼働していることでインストール可能性の判定が通り、通知を許可済みでない端末でも
+ * ホーム画面に追加できる。非対応環境では黙って何もしない。
+ */
+export async function registerServiceWorker(): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  try {
+    await registration();
+  } catch {
+    /* 登録失敗はアプリ動作に影響しないので握って続行 */
+  }
+}
+
 export async function getPushState(): Promise<PushState> {
   if (!isSupported()) return "unsupported";
   if (Notification.permission === "denied") return "denied";
