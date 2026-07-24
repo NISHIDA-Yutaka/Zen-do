@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DuePicker } from "@/components/due-picker";
 import { ProjectPicker, RecurrenceEditor, ReminderEditor } from "@/components/item-editors";
 import { PushNotice } from "@/components/push-notice";
-import { deleteJson, getJson, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
+import { mutate as globalMutate } from "swr";
+import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { formatDueFull, formatRecurrenceRule } from "@/lib/format";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
@@ -75,7 +76,7 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
     try {
       const res = await patchJson<PatchResult>(`/api/items/${currentId}`, patch);
       setDetail((d) => (d ? { ...d, item: res.item, reminders: res.reminders } : d));
-      notifyInboxChanged();
+      void globalMutate(INBOX_QUERY);
       return res;
     } catch (e) {
       setError((e as Error).message);
@@ -146,7 +147,7 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
     setError(null);
     try {
       await postJson(`/api/items/${currentId}/drop`);
-      notifyInboxChanged();
+      void globalMutate(INBOX_QUERY);
       requestClose();
     } catch (e) {
       setError((e as Error).message);
@@ -159,7 +160,7 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
     setError(null);
     try {
       await deleteJson(`/api/items/${currentId}`);
-      notifyInboxChanged();
+      void globalMutate(INBOX_QUERY);
       requestClose();
     } catch (e) {
       setError((e as Error).message);

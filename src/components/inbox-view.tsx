@@ -1,93 +1,133 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { TaskMeta } from "@/components/task-meta";
 import { addDays, todayInJst } from "@/lib/date";
-import { getJson, INBOX_QUERY, notifyInboxChanged, patchJson, postJson } from "@/lib/client";
+import {
+  getJson,
+  INBOX_QUERY,
+  makeOptimisticItem,
+  patchJson,
+  postJson,
+  revalidateLists,
+  TODAY_KEY,
+  UPCOMING_KEY,
+} from "@/lib/client";
 import type { Item } from "@/lib/types";
 
 type ItemResult = { item: Item };
 type ListResult = { items: Item[] };
 
 export function InboxView() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [upcoming, setUpcoming] = useState<Item[]>([]);
+  const today = todayInJst();
+  const upcomingKey = `${UPCOMING_KEY}${today}`;
+  const { data: inboxData, error: loadError, isLoading, mutate: mutateInbox } =
+    useSWR<ListResult>(INBOX_QUERY, getJson);
+  const { data: upData, mutate: mutateUp } = useSWR<ListResult>(upcomingKey, getJson);
+
   const [upcomingOpen, setUpcomingOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
-  const today = todayInJst();
 
-  const load = useCallback(() => {
-    getJson<ListResult>(INBOX_QUERY)
-      .then((r) => setItems(r.items))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-    // この先の予定（docs/design.md 12章）。親の有無を問わず未来日付の未完了タスク
-    getJson<ListResult>(`/api/items?kind=todo&status=todo&due_after=${todayInJst()}`)
-      .then((r) => setUpcoming([...r.items].sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const items = inboxData?.items ?? [];
+  const upcoming = [...(upData?.items ?? [])].sort((a, b) =>
+    (a.due_date ?? "").localeCompare(b.due_date ?? ""),
+  );
 
   // 日付トークンがあれば期日つきで作成＝Inboxビューには残らない（docs/design.md 11.4）
   async function capture(payload: QuickAddPayload) {
     setError(null);
-    try {
-      const { item } = await postJson<ItemResult>("/api/items", payload);
-      if (item.due_date === null && item.parent_id === null) setItems((prev) => [item, ...prev]);
-      else load();
-      notifyInboxChanged();
-    } catch (e) {
-      setError((e as Error).message);
+    // 期日なし＝Inboxに残るものだけ楽観的に即追加
+    if (!payload.due_date && !payload.parent_id) {
+      const temp = makeOptimisticItem({ title: payload.title, tags: payload.tags ?? [] });
+      try {
+        await mutateInbox(
+          async () => {
+            const { item } = await postJson<ItemResult>("/api/items", payload);
+            return { items: [item, ...items.filter((i) => i.id !== temp.id)] };
+          },
+          {
+            optimisticData: { items: [temp, ...items] },
+            populateCache: true,
+            revalidate: false,
+            rollbackOnError: true,
+          },
+        );
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    } else {
+      try {
+        await postJson<ItemResult>("/api/items", payload);
+        void revalidateLists();
+      } catch (e) {
+        setError((e as Error).message);
+      }
     }
+  }
+
+  function setBusy(id: string, on: boolean) {
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   }
 
   // 予定リストの行はその場で完了できる（繰り返しなら次回が生成され、リストに残る）
   async function completeUpcoming(item: Item) {
     setError(null);
-    setBusyIds((prev) => new Set(prev).add(item.id));
-    setUpcoming((prev) => prev.filter((i) => i.id !== item.id));
+    setBusy(item.id, true);
     try {
-      await postJson(`/api/items/${item.id}/complete`);
-      load();
+      await mutateUp(
+        async () => {
+          await postJson(`/api/items/${item.id}/complete`);
+          return undefined;
+        },
+        {
+          optimisticData: { items: upcoming.filter((i) => i.id !== item.id) },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+      void globalMutate(TODAY_KEY);
     } catch (e) {
-      setUpcoming((prev) => [item, ...prev]);
       setError((e as Error).message);
     } finally {
-      setBusyIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item.id);
-        return next;
-      });
+      setBusy(item.id, false);
     }
   }
 
   async function triage(item: Item, dueDate: string) {
     setError(null);
-    setBusyIds((prev) => new Set(prev).add(item.id));
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    setBusy(item.id, true);
     try {
       // 仕分け=期日を設定するだけ（kindは既にtodo。docs/design.md 8章）
-      await patchJson(`/api/items/${item.id}`, { due_date: dueDate });
-      notifyInboxChanged();
-      // 「明日」なら同じ画面の「この先の予定」へ移動するので再読込で反映
-      if (dueDate > today) load();
+      await mutateInbox(
+        async () => {
+          await patchJson(`/api/items/${item.id}`, { due_date: dueDate });
+          return { items: items.filter((i) => i.id !== item.id) };
+        },
+        {
+          optimisticData: { items: items.filter((i) => i.id !== item.id) },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+      // 「明日」なら「この先の予定」へ、「今日」ならTodayへ移動するので該当キーを更新
+      if (dueDate > today) void mutateUp();
+      else void globalMutate(TODAY_KEY);
     } catch (e) {
-      setItems((prev) => [item, ...prev]);
       setError((e as Error).message);
     } finally {
-      setBusyIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item.id);
-        return next;
-      });
+      setBusy(item.id, false);
     }
   }
 
@@ -100,19 +140,21 @@ export function InboxView() {
 
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
-      {loading ? (
+      {isLoading && !inboxData ? (
         <p className="text-nibi py-4 text-sm">読み込み中…</p>
+      ) : loadError && !inboxData ? (
+        <p className="text-beni py-4 text-sm">{loadError.message}</p>
       ) : items.length === 0 ? (
         <p className="text-nibi py-4 text-sm">未仕分けはありません。身軽ですね。</p>
       ) : (
         <ul>
           {items.map((item) => {
-            const busy = busyIds.has(item.id);
+            const busy = busyIds.has(item.id) || item.id.startsWith("temp-");
             return (
               <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
                 <button
                   type="button"
-                  onClick={() => setOpenId(item.id)}
+                  onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
                   className="min-w-0 flex-1 truncate text-left text-sm font-medium"
                 >
                   {item.title}
@@ -183,8 +225,7 @@ export function InboxView() {
           itemId={openId}
           onClose={() => {
             setOpenId(null);
-            load();
-            notifyInboxChanged();
+            void revalidateLists();
           }}
         />
       )}

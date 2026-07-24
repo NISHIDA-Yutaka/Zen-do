@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
 import { PwaRegister } from "@/components/pwa-register";
+import { SwrProvider } from "@/components/swr-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,7 +41,9 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col">
         <PwaRegister />
-        <AppShell>{children}</AppShell>
+        <SwrProvider>
+          <AppShell>{children}</AppShell>
+        </SwrProvider>
       </body>
     </html>
   );

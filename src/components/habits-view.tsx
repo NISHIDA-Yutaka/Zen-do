@@ -1,33 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
 import { HabitModal } from "@/components/habit-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import type { HabitRow } from "@/app/api/habits/route";
 import type { HabitStats } from "@/lib/habit-stats";
-import { getJson, postJson } from "@/lib/client";
+import { getJson, HABITS_KEY, postJson, revalidateLists, TODAY_KEY } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
 type HabitsData = { habits: HabitRow[]; date: string };
 
 export function HabitsView() {
-  const [habits, setHabits] = useState<HabitRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, error: loadError, isLoading, mutate } = useSWR<HabitsData>(HABITS_KEY, getJson);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [pausedOpen, setPausedOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    getJson<HabitsData>("/api/habits")
-      .then((r) => setHabits(r.habits))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const habits = data?.habits ?? [];
 
   function setBusy(id: string, on: boolean) {
     setBusyIds((prev) => {
@@ -50,7 +41,8 @@ export function HabitsView() {
       } else if (h.todayInstance === "done" && h.todayItemId) {
         await postJson(`/api/items/${h.todayItemId}/uncomplete`);
       }
-      load();
+      await mutate();
+      void globalMutate(TODAY_KEY); // Todayの一覧・習慣候補にも波及する
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -63,7 +55,8 @@ export function HabitsView() {
     setError(null);
     try {
       await postJson("/api/habits", { title: payload.title, frequency_rule: { type: "daily" } });
-      load();
+      await mutate();
+      void globalMutate(TODAY_KEY);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -81,8 +74,10 @@ export function HabitsView() {
 
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
-      {loading ? (
+      {isLoading && !data ? (
         <p className="text-nibi py-4 text-sm">読み込み中…</p>
+      ) : loadError && !data ? (
+        <p className="text-beni py-4 text-sm">{loadError.message}</p>
       ) : active.length === 0 ? (
         <p className="text-nibi py-4 text-sm">習慣はまだありません。続けたいことを追加しましょう。</p>
       ) : (
@@ -134,7 +129,7 @@ export function HabitsView() {
           habitId={openId}
           onClose={() => {
             setOpenId(null);
-            load();
+            void revalidateLists();
           }}
         />
       )}

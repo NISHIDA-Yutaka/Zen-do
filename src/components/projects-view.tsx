@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import type { ProjectRow } from "@/app/api/projects/route";
-import { getJson, postJson } from "@/lib/client";
+import { getJson, PROJECTS_KEY, postJson, revalidateLists } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
@@ -16,29 +17,18 @@ function formatNextDue(ymd: string, today: string): { text: string; late: boolea
 }
 
 export function ProjectsView() {
-  const [projects, setProjects] = useState<ProjectRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, error: loadError, isLoading, mutate } = useSWR<ProjectsData>(PROJECTS_KEY, getJson);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const today = todayInJst();
-
-  const load = useCallback(() => {
-    getJson<ProjectsData>("/api/projects")
-      .then((r) => setProjects(r.projects))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const projects = data?.projects ?? [];
 
   // この画面はプレーン入力（Smart Inputの適用外。docs/design.md 11.1）
   async function addProject(payload: QuickAddPayload) {
     setError(null);
     try {
       await postJson("/api/items", { kind: "project", title: payload.title });
-      load();
+      void mutate();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -53,8 +43,10 @@ export function ProjectsView() {
 
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
-      {loading ? (
+      {isLoading && !data ? (
         <p className="text-nibi py-4 text-sm">読み込み中…</p>
+      ) : loadError && !data ? (
+        <p className="text-beni py-4 text-sm">{loadError.message}</p>
       ) : projects.length === 0 ? (
         <p className="text-nibi py-4 text-sm">プロジェクトはまだありません。</p>
       ) : (
@@ -97,7 +89,7 @@ export function ProjectsView() {
           itemId={openId}
           onClose={() => {
             setOpenId(null);
-            load();
+            void revalidateLists();
           }}
         />
       )}

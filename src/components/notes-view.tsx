@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import {
   getJson,
+  makeOptimisticItem,
   MEMO_TAG,
   NOTES_ARCHIVE_QUERY,
   NOTES_QUERY,
-  notifyInboxChanged,
   postJson,
+  revalidateLists,
 } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { formatDueLabel } from "@/lib/format";
@@ -32,28 +34,19 @@ function firstLine(notes: string): string {
 
 // Notes = #memo タグ付きタスクの一覧（docs/design.md 13章）。専用の実体は持たない。
 export function NotesView() {
-  const [notes, setNotes] = useState<Item[]>([]);
-  const [archived, setArchived] = useState<Item[]>([]);
+  const { data: notesData, error: loadError, isLoading, mutate: mutateNotes } =
+    useSWR<ListResult>(NOTES_QUERY, getJson);
+  const { data: archiveData, mutate: mutateArchive } =
+    useSWR<ListResult>(NOTES_ARCHIVE_QUERY, getJson);
+
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const today = todayInJst();
 
-  const load = useCallback(() => {
-    getJson<ListResult>(NOTES_QUERY)
-      .then((r) => setNotes(byUpdatedDesc(r.items)))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-    getJson<ListResult>(NOTES_ARCHIVE_QUERY)
-      .then((r) => setArchived(byUpdatedDesc(r.items)))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const notes = byUpdatedDesc(notesData?.items ?? []);
+  const archived = byUpdatedDesc(archiveData?.items ?? []);
 
   function setBusy(id: string, on: boolean) {
     setBusyIds((prev) => {
@@ -70,10 +63,20 @@ export function NotesView() {
     const tags = payload.tags?.includes(MEMO_TAG)
       ? payload.tags
       : [...(payload.tags ?? []), MEMO_TAG];
+    const temp = makeOptimisticItem({ title: payload.title, tags });
     try {
-      const { item } = await postJson<ItemResult>("/api/items", { ...payload, tags });
-      setNotes((prev) => [item, ...prev]);
-      notifyInboxChanged();
+      await mutateNotes(
+        async () => {
+          const { item } = await postJson<ItemResult>("/api/items", { ...payload, tags });
+          return { items: [item, ...notes.filter((i) => i.id !== temp.id)] };
+        },
+        {
+          optimisticData: { items: [temp, ...notes] },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
     } catch (e) {
       setError((e as Error).message);
     }
@@ -83,12 +86,21 @@ export function NotesView() {
   async function archive(item: Item) {
     setError(null);
     setBusy(item.id, true);
-    setNotes((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      await postJson(`/api/items/${item.id}/complete`);
-      load();
+      await mutateNotes(
+        async () => {
+          await postJson(`/api/items/${item.id}/complete`);
+          return { items: notes.filter((i) => i.id !== item.id) };
+        },
+        {
+          optimisticData: { items: notes.filter((i) => i.id !== item.id) },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+      void mutateArchive();
     } catch (e) {
-      setNotes((prev) => byUpdatedDesc([item, ...prev]));
       setError((e as Error).message);
     } finally {
       setBusy(item.id, false);
@@ -98,12 +110,21 @@ export function NotesView() {
   async function unarchive(item: Item) {
     setError(null);
     setBusy(item.id, true);
-    setArchived((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      const { item: reopened } = await postJson<ItemResult>(`/api/items/${item.id}/uncomplete`);
-      setNotes((prev) => byUpdatedDesc([reopened, ...prev]));
+      await mutateArchive(
+        async () => {
+          await postJson<ItemResult>(`/api/items/${item.id}/uncomplete`);
+          return { items: archived.filter((i) => i.id !== item.id) };
+        },
+        {
+          optimisticData: { items: archived.filter((i) => i.id !== item.id) },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+      void mutateNotes();
     } catch (e) {
-      setArchived((prev) => byUpdatedDesc([item, ...prev]));
       setError((e as Error).message);
     } finally {
       setBusy(item.id, false);
@@ -119,8 +140,10 @@ export function NotesView() {
 
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
-      {loading ? (
+      {isLoading && !notesData ? (
         <p className="text-nibi py-4 text-sm">読み込み中…</p>
+      ) : loadError && !notesData ? (
+        <p className="text-beni py-4 text-sm">{loadError.message}</p>
       ) : notes.length === 0 ? (
         <p className="text-nibi py-4 text-sm">
           タスクに <span className="font-semibold">#memo</span> を付けるとここに集まります。
@@ -130,18 +153,19 @@ export function NotesView() {
           {notes.map((item) => {
             const due = formatDueLabel(item.due_date, item.due_time, today);
             const preview = firstLine(item.notes);
+            const busy = busyIds.has(item.id) || item.id.startsWith("temp-");
             return (
               <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
                 <button
                   type="button"
                   aria-label={`${item.title}をアーカイブ`}
-                  disabled={busyIds.has(item.id)}
+                  disabled={busy}
                   onClick={() => archive(item)}
                   className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
                 />
                 <button
                   type="button"
-                  onClick={() => setOpenId(item.id)}
+                  onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
                   className="min-w-0 flex-1 text-left"
                 >
                   <span className="block truncate text-sm font-medium">{item.title}</span>
@@ -210,7 +234,7 @@ export function NotesView() {
           itemId={openId}
           onClose={() => {
             setOpenId(null);
-            load();
+            void revalidateLists();
           }}
         />
       )}

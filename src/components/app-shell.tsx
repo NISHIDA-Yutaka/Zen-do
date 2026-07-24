@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { getJson, INBOX_CHANGED_EVENT, INBOX_QUERY } from "@/lib/client";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
+import { getJson, INBOX_QUERY } from "@/lib/client";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -20,34 +21,19 @@ const BOTTOM_NAV = MENU_ITEMS.slice(0, 4);
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [inboxCount, setInboxCount] = useState(0);
-  const [recentProjects, setRecentProjects] = useState<Item[]>([]);
 
-  const refreshInboxCount = useCallback(() => {
-    getJson<{ items: Item[] }>(INBOX_QUERY)
-      .then((r) => setInboxCount(r.items.length))
-      .catch(() => {});
-  }, []);
+  // バッジはInbox一覧と同一キーを共有＝1フェッチに集約され、仕分け等の mutate で自動追従する
+  const { data: inboxData } = useSWR<{ items: Item[] }>(INBOX_QUERY, getJson);
+  const inboxCount = inboxData?.items.length ?? 0;
 
-  useEffect(() => {
-    refreshInboxCount();
-    window.addEventListener(INBOX_CHANGED_EVENT, refreshInboxCount);
-    return () => window.removeEventListener(INBOX_CHANGED_EVENT, refreshInboxCount);
-  }, [pathname, refreshInboxCount]);
-
-  // ドロワーを開いたときに直近使用プロジェクトを取得（updated_at降順4件。docs/design.md 4章）
-  useEffect(() => {
-    if (!drawerOpen) return;
-    getJson<{ items: Item[] }>("/api/items?kind=project")
-      .then((r) =>
-        setRecentProjects(
-          [...r.items]
-            .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
-            .slice(0, 4),
-        ),
-      )
-      .catch(() => {});
-  }, [drawerOpen]);
+  // ドロワーを開いたときだけ直近使用プロジェクトを取得（updated_at降順4件。docs/design.md 4章）
+  const { data: projectData } = useSWR<{ items: Item[] }>(
+    drawerOpen ? "/api/items?kind=project" : null,
+    getJson,
+  );
+  const recentProjects = [...(projectData?.items ?? [])]
+    .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
+    .slice(0, 4);
 
   // スマホ: 左端からの右スワイプでドロワーを開く（ボタンなし。docs/design.md 2章）
   useEffect(() => {

@@ -11,46 +11,42 @@ import type { Habit, Item } from "@/lib/types";
 export function GET(): Promise<Response> {
   return handle(async () => {
     const today = todayInJst();
-
-    const { data: todoData, error: todoErr } = await db
-      .from("items")
-      .select("*")
-      .eq("kind", "todo")
-      .eq("status", "todo")
-      .lte("due_date", today)
-      .order("due_date", { ascending: true })
-      .order("sort_order", { ascending: true });
-    if (todoErr) throw new Error(todoErr.message);
-    const todos = (todoData ?? []) as Item[];
-
     const todayStartIso = new Date(`${today}T00:00:00+09:00`).toISOString();
-    const { data: doneData, error: doneErr } = await db
-      .from("items")
-      .select("*")
-      .eq("kind", "todo")
-      .eq("status", "done")
-      .gte("done_at", todayStartIso)
-      .order("done_at", { ascending: false });
-    if (doneErr) throw new Error(doneErr.message);
-    const done = (doneData ?? []) as Item[];
 
+    // 独立した5クエリを並列実行する（docs/design.md 17章。直列だと往復が積み上がる）
+    const [todoRes, doneRes, habitRes, logRes, instRes] = await Promise.all([
+      db
+        .from("items")
+        .select("*")
+        .eq("kind", "todo")
+        .eq("status", "todo")
+        .lte("due_date", today)
+        .order("due_date", { ascending: true })
+        .order("sort_order", { ascending: true }),
+      db
+        .from("items")
+        .select("*")
+        .eq("kind", "todo")
+        .eq("status", "done")
+        .gte("done_at", todayStartIso)
+        .order("done_at", { ascending: false }),
+      db.from("habits").select("*").eq("is_paused", false),
+      db.from("items").select("habit_id, due_date").eq("status", "done").not("habit_id", "is", null),
+      db.from("items").select("habit_id").eq("due_date", today).not("habit_id", "is", null),
+    ]);
+
+    for (const res of [todoRes, doneRes, habitRes, logRes, instRes]) {
+      if (res.error) throw new Error(res.error.message);
+    }
+
+    const todos = (todoRes.data ?? []) as Item[];
+    const done = (doneRes.data ?? []) as Item[];
     // 非pause習慣のうち、完了ログ由来の頻度判定（docs/design.md 10.1）で今日が候補のもの
-    const { data: habitData, error: habitErr } = await db
-      .from("habits")
-      .select("*")
-      .eq("is_paused", false);
-    if (habitErr) throw new Error(habitErr.message);
-    const habits = (habitData ?? []) as Habit[];
+    const habits = (habitRes.data ?? []) as Habit[];
 
     // 完了ログ = 完了済み習慣インスタンスの due_date 集合（habit_idごと）
-    const { data: logData, error: logErr } = await db
-      .from("items")
-      .select("habit_id, due_date")
-      .eq("status", "done")
-      .not("habit_id", "is", null);
-    if (logErr) throw new Error(logErr.message);
     const doneDatesByHabit = new Map<string, string[]>();
-    for (const r of (logData ?? []) as { habit_id: string; due_date: string | null }[]) {
+    for (const r of (logRes.data ?? []) as { habit_id: string; due_date: string | null }[]) {
       if (!r.due_date) continue;
       const arr = doneDatesByHabit.get(r.habit_id) ?? [];
       arr.push(r.due_date);
@@ -58,14 +54,8 @@ export function GET(): Promise<Response> {
     }
 
     // 今日分が既に生成済みの habit_id を除外
-    const { data: todayInstances, error: instErr } = await db
-      .from("items")
-      .select("habit_id")
-      .eq("due_date", today)
-      .not("habit_id", "is", null);
-    if (instErr) throw new Error(instErr.message);
     const instantiated = new Set(
-      (todayInstances ?? []).map((r) => (r as { habit_id: string }).habit_id),
+      (instRes.data ?? []).map((r) => (r as { habit_id: string }).habit_id),
     );
 
     const habitCandidates = habits.filter(

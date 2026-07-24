@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import useSWR from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { TaskMeta } from "@/components/task-meta";
-import { getJson, postJson } from "@/lib/client";
+import {
+  getJson,
+  HABITS_KEY,
+  makeOptimisticItem,
+  postJson,
+  revalidateLists,
+  TODAY_KEY,
+} from "@/lib/client";
 import type { Habit, Item } from "@/lib/types";
+import { mutate as globalMutate } from "swr";
 
 type TodayData = { date: string; todos: Item[]; habitCandidates: Habit[]; done: Item[] };
 type ItemResult = { item: Item };
@@ -19,8 +28,7 @@ function formatHeading(ymd: string): string {
 }
 
 export function TodayView({ initialItemId = null }: { initialItemId?: string | null }) {
-  const [data, setData] = useState<TodayData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, error: loadError, isLoading, mutate } = useSWR<TodayData>(TODAY_KEY, getJson);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
@@ -28,21 +36,6 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
   // 通知タップで /today?item=<id> に着地したら、そのタスクの詳細を開いた状態で始める
   const [openId, setOpenId] = useState<string | null>(initialItemId);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const load = useCallback(() => {
-    getJson<TodayData>("/api/today")
-      .then(setData)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => () => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-  }, []);
 
   function setBusy(id: string, on: boolean) {
     setBusyIds((prev) => {
@@ -63,16 +56,25 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     if (!data) return;
     setError(null);
     setBusy(item.id, true);
-    setData((d) =>
-      d ? { ...d, todos: d.todos.filter((t) => t.id !== item.id), done: [item, ...d.done] } : d,
-    );
     try {
-      await postJson(`/api/items/${item.id}/complete`);
+      await mutate(
+        async () => {
+          await postJson(`/api/items/${item.id}/complete`);
+          return undefined; // 応答は使わず revalidate に任せる（繰り返し次回生成などを正しく反映）
+        },
+        {
+          optimisticData: {
+            ...data,
+            todos: data.todos.filter((t) => t.id !== item.id),
+            done: [item, ...data.done],
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
       showToast({ itemId: item.id, title: item.title });
     } catch (e) {
-      setData((d) =>
-        d ? { ...d, todos: [item, ...d.todos], done: d.done.filter((t) => t.id !== item.id) } : d,
-      );
       setError((e as Error).message);
     } finally {
       setBusy(item.id, false);
@@ -80,15 +82,26 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
   }
 
   async function uncomplete(item: Item) {
+    if (!data) return;
     setError(null);
     setBusy(item.id, true);
     setToast(null);
     try {
-      const { item: reopened } = await postJson<ItemResult>(`/api/items/${item.id}/uncomplete`);
-      setData((d) =>
-        d
-          ? { ...d, done: d.done.filter((t) => t.id !== item.id), todos: [reopened, ...d.todos] }
-          : d,
+      await mutate(
+        async () => {
+          await postJson<ItemResult>(`/api/items/${item.id}/uncomplete`);
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            done: data.done.filter((t) => t.id !== item.id),
+            todos: [item, ...data.todos],
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
       );
     } catch (e) {
       setError((e as Error).message);
@@ -101,11 +114,20 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     if (!data) return;
     setError(null);
     setBusy(item.id, true);
-    setData((d) => (d ? { ...d, todos: d.todos.filter((t) => t.id !== item.id) } : d));
     try {
-      await postJson(`/api/items/${item.id}/postpone`);
+      await mutate(
+        async () => {
+          await postJson(`/api/items/${item.id}/postpone`);
+          return undefined;
+        },
+        {
+          optimisticData: { ...data, todos: data.todos.filter((t) => t.id !== item.id) },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
     } catch (e) {
-      setData((d) => (d ? { ...d, todos: [item, ...d.todos] } : d));
       setError((e as Error).message);
     } finally {
       setBusy(item.id, false);
@@ -116,14 +138,25 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     if (!data) return;
     setError(null);
     setBusy(habit.id, true);
-    setData((d) =>
-      d ? { ...d, habitCandidates: d.habitCandidates.filter((h) => h.id !== habit.id) } : d,
-    );
     try {
-      const { item } = await postJson<ItemResult>(`/api/habits/${habit.id}/instantiate`);
-      setData((d) => (d ? { ...d, todos: [...d.todos, item] } : d));
+      await mutate(
+        async () => {
+          await postJson<ItemResult>(`/api/habits/${habit.id}/instantiate`);
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            habitCandidates: data.habitCandidates.filter((h) => h.id !== habit.id),
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+      // 習慣カード側（Todayタスク化ボタンの3状態）も追従させる
+      void globalMutate(HABITS_KEY);
     } catch (e) {
-      setData((d) => (d ? { ...d, habitCandidates: [habit, ...d.habitCandidates] } : d));
       setError((e as Error).message);
     } finally {
       setBusy(habit.id, false);
@@ -134,18 +167,44 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
   async function addTodo(payload: QuickAddPayload) {
     if (!data) return;
     setError(null);
-    try {
-      const { item } = await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
-      // 解釈された期日が今日以外なら、この画面には出ないので再読込で整合を取る
-      if (item.due_date === data.date) setData((d) => (d ? { ...d, todos: [...d.todos, item] } : d));
-      else load();
-    } catch (e) {
-      setError((e as Error).message);
+    const dueDate = payload.due_date ?? data.date;
+    // 今日ぶんは楽観的に即追加。今日以外はこの画面に出ないので確定後に横断再検証
+    if (dueDate === data.date) {
+      const temp = makeOptimisticItem({
+        title: payload.title,
+        due_date: dueDate,
+        due_time: payload.due_time ?? null,
+        tags: payload.tags ?? [],
+        parent_id: payload.parent_id ?? null,
+      });
+      try {
+        await mutate(
+          async () => {
+            const { item } = await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
+            return { ...data, todos: [...data.todos.filter((t) => t.id !== temp.id), item] };
+          },
+          {
+            optimisticData: { ...data, todos: [...data.todos, temp] },
+            populateCache: true,
+            revalidate: false,
+            rollbackOnError: true,
+          },
+        );
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    } else {
+      try {
+        await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
+        void revalidateLists();
+      } catch (e) {
+        setError((e as Error).message);
+      }
     }
   }
 
-  if (loading) return <p className="text-nibi text-sm">読み込み中…</p>;
-  if (!data) return <p className="text-beni text-sm">{error ?? "読み込みに失敗しました"}</p>;
+  if (isLoading && !data) return <p className="text-nibi text-sm">読み込み中…</p>;
+  if (!data) return <p className="text-beni text-sm">{loadError?.message ?? "読み込みに失敗しました"}</p>;
 
   return (
     <section>
@@ -162,20 +221,20 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
             <button
               type="button"
               aria-label={`${item.title}を完了`}
-              disabled={busyIds.has(item.id)}
+              disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
               onClick={() => complete(item)}
               className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
             />
             <button
               type="button"
-              onClick={() => setOpenId(item.id)}
+              onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
               className="min-w-0 flex-1 text-left"
             >
               <TaskMeta item={item} today={data.date} />
             </button>
             <button
               type="button"
-              disabled={busyIds.has(item.id)}
+              disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
               onClick={() => postpone(item)}
               className="text-nibi hover:text-foreground hit shrink-0 text-xs"
             >
@@ -257,9 +316,8 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
           itemId={openId}
           onClose={() => {
             setOpenId(null);
-            // 通知から来た ?item= を消す（リロードで再び開かないように）
             if (window.location.search) window.history.replaceState(null, "", "/today");
-            load();
+            void revalidateLists();
           }}
         />
       )}
@@ -282,4 +340,3 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     </section>
   );
 }
-
