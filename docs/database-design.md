@@ -145,10 +145,18 @@ interval_days (from=completion):  今日(JST) + n
 
 | 引き継ぐ | 引き継がない |
 |---|---|
-| title, notes, tags, parent_id, due_time, recurrence_rule, sort_order, habit_id | 子ToDo（チェックリスト複製は将来機能）、postponed_count（0にリセット）、絶対時刻指定のリマインダー |
+| title, notes, tags, parent_id, due_time, recurrence_rule, sort_order, habit_id | postponed_count（0にリセット）、絶対時刻指定のリマインダー |
 | 相対ルールのリマインダー（rule から remind_at を新期日で再計算して複製） | |
+| **子孫サブツリー（チェックリスト複製・2026-07-27実装）** | |
 
 `generated_from` に元の回のidを記録する。
+
+**子ToDoの複製（チェックリスト運用）**: 繰り返しタスクが子ToDoを持つ場合、次回インスタンス生成時に**子孫サブツリー全体を複製**する（`src/lib/items.ts` の `copyDescendantsForRecurrence`）。用途は「毎朝のチェックリスト」——親＝チェックリスト全体、子＝各項目。次回は毎回まっさらな未完了チェックリストになる。仕様:
+
+- 複製時に各コピーは `status='todo'` / `done_at=null` にリセット（前回チェック済みでも未完了で復活）
+- `dropped` の子は引き継がない（＝チェックリストから外した項目）
+- 子には `recurrence_rule` / `habit_id` を複製しない（入れ子の繰り返し・習慣化を避ける）。子のリマインダーも複製しない
+- 各コピーの `generated_from` に元の子のidを入れ、部分ユニークインデックスで冪等化（二重完了・途中失敗の再試行で重複しない）
 
 ### 4.5 エッジケースの確定事項
 
@@ -158,7 +166,7 @@ interval_days (from=completion):  今日(JST) + n
 | 先送り（due_date変更） | その回のみ移動し `postponed_count` +1。weekly/monthly の位相は不変（ルール自体が暦に固定されているため）。interval(schedule) は位相ごと移動 |
 | 破棄（dropped） | 連鎖終了。次回は生成しない。「繰り返しをやめる」操作を兼ねる |
 | ルールの編集 | アクティブな回の `recurrence_rule` を編集＝次回以降に反映。過去の完了済み行には触らない |
-| 完了の取り消し（undo） | `generated_from = 自分` の行が存在し、かつ `status='todo'` のままなら削除して巻き戻す。ユーザーが既に編集・着手していれば削除しない |
+| 完了の取り消し（undo） | `generated_from = 自分` の行が存在し、かつ `status='todo'` のままなら削除して巻き戻す。ユーザーが既に編集・着手していれば削除しない。**次回に複製した子孫は親削除のFKカスケードで一緒に消える** |
 | 二重完了リクエスト | `generated_from` の部分ユニークインデックスがDBレベルで二重生成を防ぐ |
 | recurrence_rule があるのに due_date がない | CHECK制約で禁止（次回計算の基準が存在しないため） |
 

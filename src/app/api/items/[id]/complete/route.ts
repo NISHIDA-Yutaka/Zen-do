@@ -5,7 +5,12 @@
 import type { NextRequest } from "next/server";
 import { handle, json, notFound } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getItem, getReminders, insertReminders } from "@/lib/items";
+import {
+  copyDescendantsForRecurrence,
+  getItem,
+  getReminders,
+  insertReminders,
+} from "@/lib/items";
 import { isRelativeReminderRule, resolveRemindAt } from "@/lib/reminders";
 import { computeNextDueDate } from "@/lib/recurrence";
 import { todayInJst } from "@/lib/date";
@@ -69,6 +74,9 @@ export function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
           );
         await insertReminders(rows);
       }
+      // 子孫（チェックリスト等）を次回インスタンスへ複製する（docs/database-design.md 4.4）。
+      // 23505経路で既存を採用した場合も、複製自体が冪等なので再実行して取りこぼしを防ぐ。
+      if (next) await copyDescendantsForRecurrence(item.id, next.id);
     }
 
     // 完了マーク

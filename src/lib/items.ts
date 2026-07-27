@@ -81,4 +81,72 @@ export async function recalcRelativeReminders(item: Item): Promise<void> {
   }
 }
 
+/**
+ * 繰り返しの次回生成時に、元インスタンスの子孫サブツリーを新インスタンスへ複製する
+ * （docs/database-design.md 4.4 チェックリスト複製）。
+ * 各コピーは status='todo'・done_at=null にリセットし、generated_from に元の子のidを入れて冪等化する
+ * （二重完了リクエストや途中失敗の再試行では 23505 で弾かれ、既存を採用する）。
+ * dropped の子は引き継がない。recurrence_rule / habit_id は子に複製しない（入れ子の繰り返し・習慣化を避ける）。
+ */
+export async function copyDescendantsForRecurrence(
+  sourceParentId: string,
+  newParentId: string,
+): Promise<void> {
+  // 元id → 新id の対応。ルート（親）自身のマッピングから始める
+  const idMap = new Map<string, string>([[sourceParentId, newParentId]]);
+  let frontier = [sourceParentId];
+
+  while (frontier.length > 0) {
+    const { data, error } = await db
+      .from("items")
+      .select("*")
+      .in("parent_id", frontier)
+      .neq("status", "dropped")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    const children = (data ?? []) as Item[];
+    if (children.length === 0) break;
+
+    const nextFrontier: string[] = [];
+    for (const child of children) {
+      const newChildId = await insertChildCopy(child, idMap.get(child.parent_id!)!);
+      idMap.set(child.id, newChildId);
+      nextFrontier.push(child.id);
+    }
+    frontier = nextFrontier;
+  }
+}
+
+async function insertChildCopy(source: Item, newParentId: string): Promise<string> {
+  const row = {
+    kind: "todo" as const,
+    title: source.title,
+    notes: source.notes,
+    tags: source.tags,
+    parent_id: newParentId,
+    due_date: source.due_date,
+    due_time: source.due_time,
+    sort_order: source.sort_order,
+    status: "todo" as const,
+    generated_from: source.id,
+    postponed_count: 0,
+  };
+  const { data, error } = await db.from("items").insert(row).select("id").single();
+  if (error) {
+    // 23505 = 既に複製済み（冪等）。既存の複製を採用する
+    if (error.code === "23505") {
+      const { data: existing, error: exErr } = await db
+        .from("items")
+        .select("id")
+        .eq("generated_from", source.id)
+        .maybeSingle();
+      if (exErr) throw new Error(exErr.message);
+      if (existing) return (existing as { id: string }).id;
+    }
+    throw new Error(error.message);
+  }
+  return (data as { id: string }).id;
+}
+
 export { unwrap };
