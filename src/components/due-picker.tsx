@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { addDays, daysInMonth, isoWeekday } from "@/lib/date";
 import { parseLooseDate } from "@/lib/loose-date";
+import { parseLooseTime } from "@/lib/loose-time";
 import { cn } from "@/lib/utils";
 
 type DuePickerProps = {
@@ -18,6 +19,15 @@ export function DuePicker({ dueDate, dueTime, today, onChange }: DuePickerProps)
   const [invalid, setInvalid] = useState(false);
   // 表示中の月（YYYY-MM）
   const [month, setMonth] = useState(() => (dueDate ?? today).slice(0, 7));
+  // PC（マウス等の精密ポインタ）ではtype=timeのスピナーを避け、テキストで時刻入力させる
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: fine)");
+    const update = () => setDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   // 外部変更（カレンダータップ等）とinputの双方向同期
   useEffect(() => {
@@ -68,16 +78,24 @@ export function DuePicker({ dueDate, dueTime, today, onChange }: DuePickerProps)
           )}
         />
         <span className="flex items-center gap-1">
-          <input
-            type="time"
-            value={dueTime ? dueTime.slice(0, 5) : ""}
-            onChange={(e) => {
-              if (e.target.value) onChange(dueDate, e.target.value);
-            }}
-            disabled={!dueDate}
-            aria-label="期日の時刻"
-            className="border-wakuiro focus:border-mikan rounded-lg border px-2 py-1.5 text-xs outline-none disabled:opacity-40"
-          />
+          {desktop ? (
+            <TimeTextInput
+              dueTime={dueTime}
+              disabled={!dueDate}
+              onCommit={(t) => onChange(dueDate, t)}
+            />
+          ) : (
+            <input
+              type="time"
+              value={dueTime ? dueTime.slice(0, 5) : ""}
+              onChange={(e) => {
+                if (e.target.value) onChange(dueDate, e.target.value);
+              }}
+              disabled={!dueDate}
+              aria-label="期日の時刻"
+              className="border-wakuiro focus:border-mikan rounded-lg border px-2 py-1.5 text-xs outline-none disabled:opacity-40"
+            />
+          )}
           {dueTime && (
             <button
               type="button"
@@ -98,6 +116,66 @@ export function DuePicker({ dueDate, dueTime, today, onChange }: DuePickerProps)
         onPick={(d) => onChange(d, dueTime)}
       />
     </div>
+  );
+}
+
+function TimeTextInput({
+  dueTime,
+  disabled,
+  onCommit,
+}: {
+  dueTime: string | null;
+  disabled: boolean;
+  onCommit: (time: string) => void;
+}) {
+  const [text, setText] = useState(dueTime ? dueTime.slice(0, 5) : "");
+  const [invalid, setInvalid] = useState(false);
+
+  useEffect(() => {
+    setText(dueTime ? dueTime.slice(0, 5) : "");
+    setInvalid(false);
+  }, [dueTime]);
+
+  function commit() {
+    if (text.trim() === "") {
+      setText(dueTime ? dueTime.slice(0, 5) : "");
+      setInvalid(false);
+      return;
+    }
+    const parsed = parseLooseTime(text);
+    if (parsed) {
+      setInvalid(false);
+      onCommit(parsed);
+    } else {
+      setInvalid(true);
+      setTimeout(() => {
+        setText(dueTime ? dueTime.slice(0, 5) : "");
+        setInvalid(false);
+      }, 1200);
+    }
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      disabled={disabled}
+      placeholder="17:00"
+      aria-label="期日の時刻"
+      className={cn(
+        "w-16 rounded-lg border px-2 py-1.5 text-xs outline-none disabled:opacity-40",
+        invalid ? "border-beni" : "border-wakuiro focus:border-mikan",
+      )}
+    />
   );
 }
 

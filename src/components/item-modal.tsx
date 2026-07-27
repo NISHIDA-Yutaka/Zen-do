@@ -5,7 +5,7 @@ import { DuePicker } from "@/components/due-picker";
 import { ProjectPicker, RecurrenceEditor, ReminderEditor } from "@/components/item-editors";
 import { PushNotice } from "@/components/push-notice";
 import { mutate as globalMutate } from "swr";
-import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson } from "@/lib/client";
+import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { formatDueFull, formatRecurrenceRule } from "@/lib/format";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
@@ -109,6 +109,18 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
     if (res) {
       setExpanded(null);
       load(); // parent表示を更新
+    }
+  }
+
+  async function toggleSelf() {
+    if (!item) return;
+    setError(null);
+    try {
+      await postJson(`/api/items/${currentId}/${item.status === "done" ? "uncomplete" : "complete"}`);
+      void revalidateLists();
+      load();
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -251,7 +263,29 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
           <p className="text-nibi px-4 py-8 text-sm">読み込み中…</p>
         ) : (
           <>
-            <TitleField key={item.id} title={item.title} onSave={(t) => save({ title: t })} />
+            <div className="mx-4 mt-1.5 flex items-center gap-2.5">
+              {!isProject && (
+                <button
+                  type="button"
+                  aria-label={item.status === "done" ? "完了を取り消す" : "完了にする"}
+                  onClick={toggleSelf}
+                  className={cn(
+                    "hit flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                    item.status === "done"
+                      ? "bg-tokiwa text-white"
+                      : "border-wakuiro hover:border-tokiwa border-[1.75px]",
+                  )}
+                >
+                  {item.status === "done" ? "✓" : ""}
+                </button>
+              )}
+              <TitleField
+                key={item.id}
+                title={item.title}
+                done={item.status === "done"}
+                onSave={(t) => save({ title: t })}
+              />
+            </div>
 
             <section className="px-4 pt-1">
               <FieldRow
@@ -421,7 +455,15 @@ function FieldRow({
   );
 }
 
-function TitleField({ title, onSave }: { title: string; onSave: (t: string) => void }) {
+function TitleField({
+  title,
+  done,
+  onSave,
+}: {
+  title: string;
+  done: boolean;
+  onSave: (t: string) => void;
+}) {
   const [v, setV] = useState(title);
   useEffect(() => setV(title), [title]);
 
@@ -444,7 +486,10 @@ function TitleField({ title, onSave }: { title: string; onSave: (t: string) => v
         }
       }}
       aria-label="タイトル"
-      className="focus:border-mikan mx-4 mt-1.5 border-b border-transparent bg-transparent pb-1 text-[16.5px] font-bold outline-none"
+      className={cn(
+        "focus:border-mikan min-w-0 flex-1 border-b border-transparent bg-transparent pb-1 text-[16.5px] font-bold outline-none",
+        done && "text-nibi line-through",
+      )}
     />
   );
 }
