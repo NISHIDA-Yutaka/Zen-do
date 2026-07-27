@@ -21,7 +21,10 @@ export function GET(): Promise<Response> {
         .eq("kind", "todo")
         .eq("status", "todo")
         .lte("due_date", today)
+        // 期限の早い順に上から並べる。同日内は時刻指定ありを昇順で先に、
+        // 時刻指定なし(NULL)は下にまとめ、その中は登録順(sort_order)
         .order("due_date", { ascending: true })
+        .order("due_time", { ascending: true, nullsFirst: false })
         .order("sort_order", { ascending: true }),
       db
         .from("items")
