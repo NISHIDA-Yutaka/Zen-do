@@ -144,6 +144,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [router]);
 
+  // スマホ: 画面の左右スワイプで下部ナビ順（Inbox→Today→Projects→Habits）に前後移動。
+  //  左スワイプ=次のタブ / 右スワイプ=前のタブ。左端はドロワー用に譲り、端ではループしない。
+  useEffect(() => {
+    const order = BOTTOM_NAV.map((i) => i.href);
+    let startX: number | null = null;
+    let startY: number | null = null;
+    let startT = 0;
+
+    function onStart(e: TouchEvent) {
+      if (e.touches.length !== 1) {
+        startX = null;
+        return;
+      }
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      startT = Date.now();
+    }
+    function onEnd(e: TouchEvent) {
+      if (startX === null || startY === null) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      const sx = startX;
+      startX = null;
+      startY = null;
+
+      if (window.innerWidth >= 768) return; // 下部ナビが出るスマホ幅のみ
+      if (sx <= 28) return; // 左端は左スワイプ用ドロワーに譲る
+      if (Date.now() - startT > 600) return; // ゆっくりな動きはスクロール等とみなす
+      // 明確に水平方向のフリックだけを拾う（縦スクロールと区別）
+      if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+
+      const curIdx = order.findIndex((href) => pathname.startsWith(href));
+      if (curIdx === -1) return; // 下部ナビに無い画面（Notes/Settings）では無効
+      const nextIdx = dx < 0 ? curIdx + 1 : curIdx - 1;
+      if (nextIdx < 0 || nextIdx >= order.length) return; // 端では移動しない
+      router.push(order[nextIdx]);
+    }
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchend", onEnd);
+    };
+  }, [pathname, router]);
+
   useEffect(() => setDrawerOpen(false), [pathname]);
 
   return (
