@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRelativeReminderRule, resolveRemindAt } from "@/lib/reminders";
+import { autoDueTimeReminders, isRelativeReminderRule, resolveRemindAt } from "@/lib/reminders";
 import type { ReminderRule } from "@/lib/types";
 
 describe("isRelativeReminderRule", () => {
@@ -37,5 +37,28 @@ describe("resolveRemindAt", () => {
   });
   it("before_due_minutes: due_time が無ければ null", () => {
     expect(resolveRemindAt({ kind: "before_due_minutes", minutes: 60 }, "2026-07-20", null)).toBeNull();
+  });
+
+  it("before_due_minutes: 0分前=期限時刻ちょうど", () => {
+    const rule: ReminderRule = { kind: "before_due_minutes", minutes: 0 };
+    // 期限 2026-07-20 15:00 JST = 06:00 UTC ちょうど
+    expect(resolveRemindAt(rule, "2026-07-20", "15:00")).toBe("2026-07-20T06:00:00.000Z");
+  });
+});
+
+describe("autoDueTimeReminders", () => {
+  it("期日＋時刻あり＆手動リマインダー0件 → 0分前を1件", () => {
+    expect(autoDueTimeReminders("2026-07-20", "15:00", 0)).toEqual([
+      { kind: "before_due_minutes", minutes: 0 },
+    ]);
+  });
+  it("手動リマインダーが既にあれば付けない", () => {
+    expect(autoDueTimeReminders("2026-07-20", "15:00", 1)).toEqual([]);
+  });
+  it("時刻が無ければ付けない（終日タスク）", () => {
+    expect(autoDueTimeReminders("2026-07-20", null, 0)).toEqual([]);
+  });
+  it("期日が無ければ付けない", () => {
+    expect(autoDueTimeReminders(null, "15:00", 0)).toEqual([]);
   });
 });

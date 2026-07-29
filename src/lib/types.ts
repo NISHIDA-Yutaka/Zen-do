@@ -55,6 +55,7 @@ export interface Habit {
   tags: string[];
   frequency_rule: FrequencyRule;
   default_reminder_rule: ReminderRule | null;
+  default_due_time: string | null;
   is_paused: boolean;
   sort_order: number;
   created_at: string;

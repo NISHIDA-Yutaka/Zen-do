@@ -38,7 +38,7 @@ export const reminderRuleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("at"), at: datetimeString }),
   z.object({ kind: z.literal("on_due_at"), time: timeString }),
   z.object({ kind: z.literal("day_before_at"), time: timeString }),
-  z.object({ kind: z.literal("before_due_minutes"), minutes: z.number().int().min(1) }),
+  z.object({ kind: z.literal("before_due_minutes"), minutes: z.number().int().min(0) }),
 ]);
 
 // --- Item 作成（statusは常にtodoで生まれるため受け付けない） ---
@@ -77,6 +77,7 @@ export const createHabitSchema = z.object({
   tags: z.array(z.string()).optional(),
   frequency_rule: frequencyRuleSchema,
   default_reminder_rule: reminderRuleSchema.nullable().optional(),
+  default_due_time: timeString.nullable().optional(),
   is_paused: z.boolean().optional(),
   sort_order: z.number().optional(),
 });
@@ -87,6 +88,7 @@ export const updateHabitSchema = z.object({
   tags: z.array(z.string()).optional(),
   frequency_rule: frequencyRuleSchema.optional(),
   default_reminder_rule: reminderRuleSchema.nullable().optional(),
+  default_due_time: timeString.nullable().optional(),
   is_paused: z.boolean().optional(),
   sort_order: z.number().optional(),
 });

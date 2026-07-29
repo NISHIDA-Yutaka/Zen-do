@@ -78,6 +78,7 @@ export function POST(req: NextRequest): Promise<Response> {
       tags: body.tags ?? [],
       frequency_rule: body.frequency_rule,
       default_reminder_rule: body.default_reminder_rule ?? null,
+      default_due_time: body.default_due_time ?? null,
       is_paused: body.is_paused ?? false,
       sort_order: body.sort_order ?? 0,
     };

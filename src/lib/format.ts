@@ -44,6 +44,7 @@ export function formatReminderRule(rule: ReminderRule): string {
     case "day_before_at":
       return `前日 ${rule.time}`;
     case "before_due_minutes":
+      if (rule.minutes === 0) return "期限の時刻に通知";
       return rule.minutes % 60 === 0 ? `${rule.minutes / 60}時間前` : `${rule.minutes}分前`;
   }
 }

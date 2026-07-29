@@ -6,6 +6,7 @@ import { handle, json, notFound, parseBody } from "@/lib/api";
 import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { buildReminderRows, getReminders, insertReminders } from "@/lib/items";
+import { autoDueTimeReminders } from "@/lib/reminders";
 import type { Habit, Item } from "@/lib/types";
 import { instantiateHabitSchema } from "@/lib/validation";
 
@@ -34,6 +35,7 @@ export function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       tags: habit.tags,
       habit_id: habit.id,
       due_date: date,
+      due_time: habit.default_due_time ?? null,
       status: "todo" as const,
     };
     const { data, error } = await db.from("items").insert(insertRow).select("*").single();
@@ -55,9 +57,19 @@ export function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     }
 
     const item = data as Item;
-    // 既定リマインダーがあれば付与
+    // 既定リマインダーがあれば付与（事前通知として期限の時間と併存する）
+    let reminderCount = 0;
     if (habit.default_reminder_rule) {
-      const built = buildReminderRows(item.id, [habit.default_reminder_rule], date, null);
+      const built = buildReminderRows(item.id, [habit.default_reminder_rule], date, item.due_time);
+      if (built.ok) {
+        await insertReminders(built.rows);
+        reminderCount = built.rows.length;
+      }
+    }
+    // 期限の時間があり手動リマインダーが無ければ、期限ちょうどの通知を自動付与
+    const auto = autoDueTimeReminders(item.due_date, item.due_time, reminderCount);
+    if (auto.length > 0) {
+      const built = buildReminderRows(item.id, auto, item.due_date, item.due_time);
       if (built.ok) await insertReminders(built.rows);
     }
     return json({ item, reminders: await getReminders(item.id), created: true }, 201);

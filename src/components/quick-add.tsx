@@ -116,7 +116,7 @@ export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDa
   }
 
   return (
-    <div className="relative hidden md:block">
+    <div className="relative hidden md:mt-3 md:block">
       {s.parsed && <SmartPreview parsed={s.parsed} onCancelToken={s.cancelToken} />}
       <form onSubmit={(e) => { e.preventDefault(); add(); }} className="flex items-center gap-2.5 pb-3">
         <span aria-hidden className="text-mikan text-lg font-extrabold">＋</span>

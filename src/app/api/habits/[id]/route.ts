@@ -41,6 +41,7 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       "tags",
       "frequency_rule",
       "default_reminder_rule",
+      "default_due_time",
       "is_paused",
       "sort_order",
     ] as const) {

@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { badRequest, handle, json, parseBody } from "@/lib/api";
 import { db } from "@/lib/db";
 import { buildReminderRows, getReminders, insertReminders } from "@/lib/items";
+import { autoDueTimeReminders } from "@/lib/reminders";
 import type { Item } from "@/lib/types";
 import { createItemSchema } from "@/lib/validation";
 
@@ -88,6 +89,13 @@ export function POST(req: NextRequest): Promise<Response> {
         return badRequest(built.message);
       }
       await insertReminders(built.rows);
+    } else {
+      // 手動リマインダー指定なし＆期限時刻あり → 期限ちょうどの通知を自動付与
+      const auto = autoDueTimeReminders(dueDate, dueTime, 0);
+      if (auto.length > 0) {
+        const built = buildReminderRows(item.id, auto, dueDate, dueTime);
+        if (built.ok) await insertReminders(built.rows);
+      }
     }
 
     const reminders = await getReminders(item.id);

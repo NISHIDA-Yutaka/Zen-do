@@ -83,7 +83,8 @@ push_subscriptions（独立: Web Push購読端末）
 | id | uuid PK | |
 | title / notes / tags | | itemsと同様 |
 | frequency_rule | jsonb | 5章参照。daily / every_n_days / times_per_week の3種（2026-07-16刷新） |
-| default_reminder_rule | jsonb | インスタンス生成時に自動で付けるリマインダールール（6章の語彙。null可） |
+| default_reminder_rule | jsonb | インスタンス生成時に自動で付けるリマインダールール（6章の語彙。null可）。事前通知として default_due_time と併存 |
+| default_due_time | time | インスタンス生成時に item.due_time へ入れる期限時刻（null可・2026-07-29）。手動リマインダーが無ければ期限ちょうど(0分前)の通知が自動で付く |
 | is_paused | boolean | 一時停止中はプランナーに出ない・実践率の分母にも入れない |
 | sort_order | double precision | |
 | created_at / updated_at | | |
@@ -187,7 +188,7 @@ interval_days (from=completion):  今日(JST) + n
 ### 5.2 インスタンス化の流れ
 
 1. Todayビュー付属のデイリープランナーが「候補（下記）かつ 当日未生成 かつ 非pause」の習慣を表示。候補判定は**完了ログ依存**: daily=毎日 / every_n_days=最終完了からn日経過（実績ゼロなら毎日） / times_per_week=今週の完了数がn未満
-2. ユーザーがピックすると `items` に行を生成: `kind='todo', habit_id=習慣id, due_date=今日`。title/notes/tagsは習慣マスターからコピー、`default_reminder_rule` があればリマインダーも生成
+2. ユーザーがピックすると `items` に行を生成: `kind='todo', habit_id=習慣id, due_date=今日`。title/notes/tagsは習慣マスターからコピー。`default_due_time` があれば `due_time` に設定。`default_reminder_rule` があればリマインダーも生成し、それが無く期限の時間がある場合は**期限ちょうど(0分前)の通知を自動付与**（6.1）
 3. ピック解除＝その行を削除。「今日はやらない」＝ピックしない（行を作らない）だけ。**「やらなかった」ことを記録する操作は存在しない**（責めない設計）
 
 `(habit_id, due_date)` のユニーク制約により同日二重生成はDBレベルで不可能。
@@ -210,9 +211,11 @@ interval_days (from=completion):  今日(JST) + n
 { "kind": "on_due_at", "time": "08:00" }             // 当日の指定時刻
 { "kind": "day_before_at", "time": "20:00" }         // 前日の指定時刻
 { "kind": "before_due_minutes", "minutes": 60 }      // 期限のn分前（due_time必須。バリデーションで担保）
+{ "kind": "before_due_minutes", "minutes": 0 }       // 0分前＝期限時刻ちょうど（自動付与に使用・2026-07-29）
 ```
 
 - 作成時に rule → `remind_at`（絶対時刻）へ解決して保存。**due_date/due_time を変更したら、そのitemの相対ルールのリマインダーを全て再計算する**（サーバー側の更新処理に組み込む）
+- **期限時刻の通知を自動付与（2026-07-29）**: 期日＋時刻があり手動リマインダーが1件も無いとき、`before_due_minutes: 0`（期限ちょうど）を1件だけ自動で付ける（`src/lib/reminders.ts` の `autoDueTimeReminders`）。適用箇所は Item作成 / 時刻を「なし→あり」に変えるPATCH / Habitインスタンス生成。0分前は due_time に連動して remind_at が再計算されるため期限変更に追随する。一度消した通知は、時刻を新規に付け直さない限り復活しない（Aの挙動）
 - 1つのitemに複数リマインダー可（例: 前日20時 + 当日朝8時 + 1時間前）
 
 ### 6.2 配信（ディスパッチャ・実装済み）

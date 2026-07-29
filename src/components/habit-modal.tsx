@@ -166,6 +166,11 @@ export function HabitModal({ habitId, onClose }: { habitId: string; onClose: () 
                 </div>
               </div>
 
+              <DueTimeRow
+                time={habit.default_due_time}
+                onSave={(t) => save({ default_due_time: t })}
+              />
+
               <ReminderRow
                 rule={habit.default_reminder_rule}
                 onSave={(r) => save({ default_reminder_rule: r })}
@@ -196,6 +201,37 @@ export function HabitModal({ habitId, onClose }: { habitId: string; onClose: () 
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+function DueTimeRow({
+  time,
+  onSave,
+}: {
+  time: string | null;
+  onSave: (t: string | null) => void;
+}) {
+  return (
+    <div className="border-keisen border-b py-2.5 text-[13px]">
+      <div className="flex items-center justify-between">
+        <span className="text-nibi text-xs">期限の時間</span>
+        {time ? (
+          <button type="button" onClick={() => onSave(null)} className="text-nibi/60 hover:text-foreground hit-y text-xs">
+            なしにする
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-1.5 flex items-center gap-2">
+        <input
+          type="time"
+          value={time ? time.slice(0, 5) : ""}
+          onChange={(e) => onSave(e.target.value ? e.target.value : null)}
+          aria-label="期限の時間"
+          className="border-wakuiro focus:border-mikan rounded-md border px-2 py-1 text-xs outline-none"
+        />
+        <span className="text-nibi/70 text-[11px]">当日タスクにこの時刻が入り、時刻に通知します</span>
+      </div>
     </div>
   );
 }

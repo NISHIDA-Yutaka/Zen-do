@@ -12,6 +12,7 @@ import {
   insertReminders,
   recalcRelativeReminders,
 } from "@/lib/items";
+import { autoDueTimeReminders } from "@/lib/reminders";
 import type { Item } from "@/lib/types";
 import { updateItemSchema } from "@/lib/validation";
 
@@ -99,6 +100,16 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
         (body.due_date !== undefined && body.due_date !== item.due_date) ||
         (body.due_time !== undefined && body.due_time !== item.due_time);
       if (dueChanged) await recalcRelativeReminders(updated);
+      // 時刻を新規に付与（なし→あり）＆手動リマインダーが無ければ、期限ちょうどの通知を自動付与
+      const gainedTime = body.due_time !== undefined && !!body.due_time && !item.due_time;
+      if (gainedTime) {
+        const existing = await getReminders(id);
+        const auto = autoDueTimeReminders(effDueDate, effDueTime, existing.length);
+        if (auto.length > 0) {
+          const built = buildReminderRows(id, auto, effDueDate, effDueTime);
+          if (built.ok) await insertReminders(built.rows);
+        }
+      }
     }
 
     const reminders = await getReminders(id);

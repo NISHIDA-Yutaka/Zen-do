@@ -12,6 +12,22 @@ export function isRelativeReminderRule(rule: ReminderRule): boolean {
 }
 
 /**
+ * 期限時刻ちょうどに通知するための自動リマインダー（docs/database-design.md 6.1）。
+ * 期日と時刻が揃っていて、手動リマインダーが1件も無いときだけ「期限ちょうど(0分前)」を1件返す。
+ * before_due_minutes を使うので、期限時刻を変えても remind_at は再計算で追随する。
+ */
+export function autoDueTimeReminders(
+  dueDate: string | null,
+  dueTime: string | null,
+  existingRuleCount: number,
+): ReminderRule[] {
+  if (dueDate && dueTime && existingRuleCount === 0) {
+    return [{ kind: "before_due_minutes", minutes: 0 }];
+  }
+  return [];
+}
+
+/**
  * ルールを remind_at（UTCのISO文字列）へ解決する。
  * due_date/due_time が不足していて解決できない場合は null を返す。
  */
