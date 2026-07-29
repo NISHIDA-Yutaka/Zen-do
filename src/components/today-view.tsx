@@ -9,6 +9,7 @@ import {
   getJson,
   HABITS_KEY,
   makeOptimisticItem,
+  patchJson,
   postJson,
   revalidateLists,
   TODAY_KEY,
@@ -110,14 +111,48 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
-  async function postpone(item: Item) {
+  // 期限超過タスクを当日へ引き上げる（期日を今日に更新）
+  async function assignToday(item: Item) {
     if (!data) return;
     setError(null);
     setBusy(item.id, true);
     try {
       await mutate(
         async () => {
-          await postJson(`/api/items/${item.id}/postpone`);
+          await patchJson(`/api/items/${item.id}`, { due_date: data.date });
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            todos: data.todos.map((t) => (t.id === item.id ? { ...t, due_date: data.date } : t)),
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
+  // 期限を外してInbox（未仕分け）へ送り、再スケジュールを促す。
+  // 期日クリアに伴い繰り返しも外れる（DB制約 recurrence_requires_due_date）
+  async function clearDue(item: Item) {
+    if (!data) return;
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutate(
+        async () => {
+          await patchJson(`/api/items/${item.id}`, {
+            due_date: null,
+            due_time: null,
+            recurrence_rule: null,
+          });
           return undefined;
         },
         {
@@ -232,14 +267,27 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
             >
               <TaskMeta item={item} today={data.date} />
             </button>
-            <button
-              type="button"
-              disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-              onClick={() => postpone(item)}
-              className="text-nibi hover:text-foreground hit shrink-0 text-xs"
-            >
-              明日へ
-            </button>
+            {item.due_date && item.due_date < data.date && (
+              <span className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                  onClick={() => assignToday(item)}
+                  className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
+                >
+                  今日へ
+                </button>
+                <button
+                  type="button"
+                  aria-label="期限を外してInboxへ送る"
+                  disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                  onClick={() => clearDue(item)}
+                  className="text-nibi hover:text-foreground hit-y shrink-0 text-[11px] disabled:opacity-40"
+                >
+                  Inboxへ
+                </button>
+              </span>
+            )}
           </li>
         ))}
       </ul>

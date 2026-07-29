@@ -104,6 +104,30 @@ export function InboxView() {
     }
   }
 
+  // 未仕分けタスクをその場で完了（期日なしなので次回生成なし・リストから外れるだけ）
+  async function complete(item: Item) {
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutateInbox(
+        async () => {
+          await postJson(`/api/items/${item.id}/complete`);
+          return { items: items.filter((i) => i.id !== item.id) };
+        },
+        {
+          optimisticData: { items: items.filter((i) => i.id !== item.id) },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
   async function triage(item: Item, dueDate: string) {
     setError(null);
     setBusy(item.id, true);
@@ -152,6 +176,13 @@ export function InboxView() {
             const busy = busyIds.has(item.id) || item.id.startsWith("temp-");
             return (
               <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
+                <button
+                  type="button"
+                  aria-label={`${item.title}を完了`}
+                  disabled={busy}
+                  onClick={() => complete(item)}
+                  className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px] disabled:opacity-40"
+                />
                 <button
                   type="button"
                   onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
