@@ -122,6 +122,7 @@ export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDa
         <span aria-hidden className="text-mikan text-lg font-extrabold">＋</span>
         <input
           ref={inputRef}
+          data-quickadd-input
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}

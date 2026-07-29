@@ -469,3 +469,12 @@ spec.md 6章「PWA一本化」の土台。**今回はインストール可能（
 ### 17.4 検証済みの挙動
 
 型チェック・テスト95件維持。ブラウザ（dev）で: **Today/Inboxの追加が50ms以内に即表示・応答後も重複なし**／**タブを戻ると「読み込み中…」を挟まずキャッシュ即描画**／Inbox追加でバッジが即 0→1（同一キー共有）／`/api/today` は単一リクエスト／PC・モバイル・ダークモードで回帰・エラーなし。
+
+## 18. キーボードショートカット（実装済み・2026-07-29）
+
+PC向けのグローバルショートカット。実装は `AppShell` の window keydown リスナー（`src/components/app-shell.tsx`）。
+
+- **G → I / T / P / H**: Inbox / Today / Projects / Habits へ遷移（`router.push`）。Gを前置キーにした2ストローク（Gmail流）。G押下後1.5秒でリセット
+- **T（単独）**: そのページの入力欄へフォーカス。対象は `data-quickadd-input` を持つ可視な入力欄（PC常設の `QuickAddInline`）。Today/Inbox/Projects/Habits で共通
+- **無効化条件**: テキスト入力中（activeElement が input/textarea/select/contenteditable）／モーダル表示中（`[role="dialog"]` が存在）／修飾キー併用（⌘/Ctrl/Alt）／IME変換中（`isComposing`）。これらの時は全ショートカットを素通り
+- モバイルの非表示入力欄（`offsetParent === null`）はTのフォーカス対象から除外する

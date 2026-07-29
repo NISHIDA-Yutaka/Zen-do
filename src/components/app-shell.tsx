@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { getJson, INBOX_QUERY } from "@/lib/client";
@@ -20,6 +20,7 @@ const BOTTOM_NAV = MENU_ITEMS.slice(0, 4);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // バッジはInbox一覧と同一キーを共有＝1フェッチに集約され、仕分け等の mutate で自動追従する
@@ -69,6 +70,79 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // キーボードショートカット（docs/design.md 2章）。
+  //  G→I/T/P/H で各画面へ / 単独T でその画面の入力欄へフォーカス。
+  //  テキスト入力中・モーダル表示中・修飾キー併用・IME変換中は無効。
+  useEffect(() => {
+    const GOTO: Record<string, string> = {
+      i: "/inbox",
+      t: "/today",
+      p: "/projects",
+      h: "/habits",
+    };
+    let gPending = false;
+    let gTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearG = () => {
+      gPending = false;
+      if (gTimer) clearTimeout(gTimer);
+    };
+
+    function isBlocked(): boolean {
+      if (document.querySelector('[role="dialog"]')) return true;
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      return (
+        el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        el.isContentEditable
+      );
+    }
+
+    function focusQuickAdd() {
+      const inputs = document.querySelectorAll<HTMLElement>("[data-quickadd-input]");
+      for (const el of inputs) {
+        // 可視な入力欄（PCの常設欄）だけを対象にする。モバイルの非表示欄は offsetParent が null
+        if (el.offsetParent !== null) {
+          el.focus();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      if (isBlocked()) {
+        clearG();
+        return;
+      }
+      const k = e.key.toLowerCase();
+
+      if (gPending) {
+        clearG();
+        if (GOTO[k]) {
+          e.preventDefault();
+          router.push(GOTO[k]);
+        }
+        return;
+      }
+      if (k === "g") {
+        gPending = true;
+        gTimer = setTimeout(clearG, 1500);
+        e.preventDefault();
+        return;
+      }
+      if (k === "t" && focusQuickAdd()) e.preventDefault();
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      clearG();
+    };
+  }, [router]);
 
   useEffect(() => setDrawerOpen(false), [pathname]);
 
