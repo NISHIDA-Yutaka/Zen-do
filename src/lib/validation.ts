@@ -31,6 +31,7 @@ export const frequencyRuleSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("daily") }),
   z.object({ type: z.literal("every_n_days"), n: z.number().int().min(2).max(365) }),
   z.object({ type: z.literal("times_per_week"), n: z.number().int().min(1).max(7) }),
+  z.object({ type: z.literal("times_per_month"), n: z.number().int().min(1).max(31) }),
 ]);
 
 // --- リマインダールール ---

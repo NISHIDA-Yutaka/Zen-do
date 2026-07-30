@@ -145,6 +145,8 @@ function freqLabel(rule: HabitRow["frequency_rule"]): string {
       return `${rule.n}日に1回`;
     case "times_per_week":
       return `週${rule.n}回`;
+    case "times_per_month":
+      return `月${rule.n}回`;
   }
 }
 
@@ -217,12 +219,14 @@ function ProgressText({ stats }: { stats: HabitStats }) {
   if (stats.nextLabel) {
     return <span className="text-foreground/80 text-xs font-bold">{stats.nextLabel}</span>;
   }
-  if (stats.weekTarget === 7) {
+  // 日課は「今週の実施回数 x/7」を表示（達成/未達成の色分けはしない）
+  if (stats.streakUnit === "日") {
     return <span className="text-foreground text-[13px] font-extrabold tabular-nums">今週 {stats.weekDone}/7</span>;
   }
+  const period = stats.streakUnit === "ヶ月" ? "今月" : "今週";
   return (
     <span className={cn("text-[13px] font-extrabold tabular-nums", stats.weekAchieved ? "text-tokiwa" : "text-foreground")}>
-      今週 {stats.weekDone}/{stats.weekTarget}
+      {period} {stats.weekDone}/{stats.weekTarget}
       {stats.weekAchieved ? " 達成！" : ""}
     </span>
   );

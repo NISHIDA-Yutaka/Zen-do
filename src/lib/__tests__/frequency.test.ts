@@ -52,3 +52,27 @@ describe("isPlannerCandidate: times_per_week (n=3)", () => {
     expect(isPlannerCandidate(rule, TODAY, twoThisWeekPlusSunday)).toBe(true);
   });
 });
+
+describe("isPlannerCandidate: times_per_month (n=3)", () => {
+  const rule = { type: "times_per_month", n: 3 } as const;
+
+  it("今月の完了がn回未満なら候補", () => {
+    expect(isPlannerCandidate(rule, TODAY, [])).toBe(true);
+    expect(isPlannerCandidate(rule, TODAY, ["2026-07-01", "2026-07-10"])).toBe(true);
+  });
+  it("今月n回完了したら候補外", () => {
+    expect(
+      isPlannerCandidate(rule, TODAY, ["2026-07-01", "2026-07-05", "2026-07-10"]),
+    ).toBe(false);
+  });
+  it("先月の完了は今月のカウントに入れない（暦月リセット）", () => {
+    // 06-28・06-30 は先月分。今月分は2回だけなので候補
+    expect(
+      isPlannerCandidate(rule, TODAY, ["2026-06-28", "2026-06-30", "2026-07-01", "2026-07-05"]),
+    ).toBe(true);
+  });
+  it("月の境界: 1日(07-01)は今月、前月末(06-30)は先月", () => {
+    const twoThisMonthPlusPrevEnd = ["2026-06-30", "2026-07-01", "2026-07-05"];
+    expect(isPlannerCandidate(rule, TODAY, twoThisMonthPlusPrevEnd)).toBe(true);
+  });
+});

@@ -23,5 +23,11 @@ export function isPlannerCandidate(
       const doneThisWeek = doneDates.filter((d) => d >= weekStart && d <= today).length;
       return doneThisWeek < rule.n;
     }
+    case "times_per_month": {
+      // 今月(暦月)の完了数がn未満なら毎日候補
+      const monthStart = `${today.slice(0, 7)}-01`;
+      const doneThisMonth = doneDates.filter((d) => d >= monthStart && d <= today).length;
+      return doneThisMonth < rule.n;
+    }
   }
 }

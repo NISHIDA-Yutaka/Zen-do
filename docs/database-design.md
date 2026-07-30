@@ -82,7 +82,7 @@ push_subscriptions（独立: Web Push購読端末）
 |---|---|---|
 | id | uuid PK | |
 | title / notes / tags | | itemsと同様 |
-| frequency_rule | jsonb | 5章参照。daily / every_n_days / times_per_week の3種（2026-07-16刷新） |
+| frequency_rule | jsonb | 5章参照。daily / every_n_days / times_per_week / times_per_month の4種（2026-07-16刷新、月n回を2026-07-30追加） |
 | default_reminder_rule | jsonb | インスタンス生成時に自動で付けるリマインダールール（6章の語彙。null可）。事前通知として default_due_time と併存 |
 | default_due_time | time | インスタンス生成時に item.due_time へ入れる期限時刻（null可・2026-07-29）。手動リマインダーが無ければ期限ちょうど(0分前)の通知が自動で付く |
 | is_paused | boolean | 一時停止中はプランナーに出ない・実践率の分母にも入れない |

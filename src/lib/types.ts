@@ -17,7 +17,8 @@ export type RecurrenceRule =
 export type FrequencyRule =
   | { type: "daily" }
   | { type: "every_n_days"; n: number }
-  | { type: "times_per_week"; n: number };
+  | { type: "times_per_week"; n: number }
+  | { type: "times_per_month"; n: number };
 
 // リマインダールール（docs/database-design.md 6.1）
 export type ReminderRule =

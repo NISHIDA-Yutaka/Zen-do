@@ -136,7 +136,7 @@ export function HabitModal({ habitId, onClose }: { habitId: string; onClose: () 
                 )}
                 <div className="text-foreground/80 mt-1.5 text-xs font-bold">
                   {stats.nextLabel ??
-                    `今週 ${stats.weekDone}/${stats.weekTarget}${stats.weekAchieved ? " 達成！" : ""}`}
+                    `${stats.streakUnit === "ヶ月" ? "今月" : "今週"} ${stats.weekDone}/${stats.weekTarget}${stats.weekAchieved ? " 達成！" : ""}`}
                 </div>
                 <div className="text-nibi mt-0.5 text-[10.5px]">直近4週の達成 {stats.fourWeekRate}%</div>
               </div>
@@ -146,7 +146,7 @@ export function HabitModal({ habitId, onClose }: { habitId: string; onClose: () 
               <div className="border-keisen border-b py-2.5">
                 <span className="text-nibi text-xs">頻度</span>
                 <div className="mt-2 flex flex-col gap-2">
-                  <span className="flex gap-1.5">
+                  <span className="flex flex-wrap gap-1.5">
                     <SegButton on={rule.type === "daily"} onClick={() => save({ frequency_rule: { type: "daily" } })}>
                       毎日
                     </SegButton>
@@ -156,12 +156,18 @@ export function HabitModal({ habitId, onClose }: { habitId: string; onClose: () 
                     <SegButton on={rule.type === "times_per_week"} onClick={() => save({ frequency_rule: { type: "times_per_week", n: 3 } })}>
                       週n回
                     </SegButton>
+                    <SegButton on={rule.type === "times_per_month"} onClick={() => save({ frequency_rule: { type: "times_per_month", n: 4 } })}>
+                      月n回
+                    </SegButton>
                   </span>
                   {rule.type === "every_n_days" && (
                     <Stepper value={rule.n} min={2} max={365} prefix="" suffix="日に1回" onChange={(n) => save({ frequency_rule: { type: "every_n_days", n } as FrequencyRule })} />
                   )}
                   {rule.type === "times_per_week" && (
                     <Stepper value={rule.n} min={1} max={7} prefix="週 " suffix=" 回" onChange={(n) => save({ frequency_rule: { type: "times_per_week", n } as FrequencyRule })} />
+                  )}
+                  {rule.type === "times_per_month" && (
+                    <Stepper value={rule.n} min={1} max={31} prefix="月 " suffix=" 回" onChange={(n) => save({ frequency_rule: { type: "times_per_month", n } as FrequencyRule })} />
                   )}
                 </div>
               </div>

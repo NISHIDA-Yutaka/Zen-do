@@ -136,3 +136,57 @@ describe("times_per_week (n=3)", () => {
     expect(s.streak).toBe(0);
   });
 });
+
+// 基準日 2026-07-16 → 今月=07-01〜07-31 / 先月=06 / 2ヶ月前=05
+describe("times_per_month (n=3)", () => {
+  const rule = { type: "times_per_month", n: 3 } as const;
+
+  it("今月3回 → 達成・streakに含む（単位ヶ月）", () => {
+    const s = computeHabitStats(rule, ["2026-07-01", "2026-07-05", "2026-07-10"], TODAY);
+    expect(s.weekAchieved).toBe(true);
+    expect(s.weekDone).toBe(3);
+    expect(s.weekTarget).toBe(3);
+    expect(s.streak).toBe(1);
+    expect(s.streakUnit).toBe("ヶ月");
+  });
+
+  it("今月3回＋先月3回 → 連続2ヶ月", () => {
+    const s = computeHabitStats(
+      rule,
+      ["2026-06-01", "2026-06-02", "2026-06-03", "2026-07-01", "2026-07-05", "2026-07-10"],
+      TODAY,
+    );
+    expect(s.streak).toBe(2);
+  });
+
+  it("今月未達成でも先月達成なら途切れない", () => {
+    // 先月3回、今月1回
+    const s = computeHabitStats(
+      rule,
+      ["2026-06-01", "2026-06-02", "2026-06-03", "2026-07-01"],
+      TODAY,
+    );
+    expect(s.weekAchieved).toBe(false);
+    expect(s.streak).toBe(1); // 先月分
+    expect(s.resting).toBe(false); // 前月達成なので救済発動なし
+  });
+
+  it("前月未達成・今月未達成 → おやすみ中（救済・残日数は月末まで）", () => {
+    // 2ヶ月前(05月)3回、先月0回、今月0回
+    const s = computeHabitStats(rule, ["2026-05-01", "2026-05-02", "2026-05-03"], TODAY);
+    expect(s.streak).toBe(1); // 2ヶ月前分
+    expect(s.resting).toBe(true);
+    expect(s.restDaysLeft).toBe(16); // 07-16..07-31 の16日
+  });
+
+  it("2ヶ月連続未達成で途切れ", () => {
+    // 3ヶ月前(04月)3回、以降未達成
+    const s = computeHabitStats(rule, ["2026-04-01", "2026-04-02", "2026-04-03"], TODAY);
+    expect(s.streak).toBe(0);
+  });
+
+  it("先月の完了は今月にカウントしない（暦月境界）", () => {
+    const s = computeHabitStats(rule, ["2026-06-30", "2026-07-01"], TODAY);
+    expect(s.weekDone).toBe(1);
+  });
+});

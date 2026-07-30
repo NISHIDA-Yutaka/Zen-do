@@ -4,12 +4,12 @@
 // おやすみ救済の解釈（design.md 10.2「1回逃してもOK・2連続で途切れ」）:
 //   単発の未実施1回は許容（streakに数えない）。2連続の未実施で途切れ。
 //   当日はまだ終わっていないため、未実施でも減点しない。
-import { addDays, diffDays, weekStartMonday } from "@/lib/date";
+import { addDays, daysInMonth, diffDays, weekStartMonday } from "@/lib/date";
 import type { FrequencyRule } from "@/lib/types";
 
 export type HabitStats = {
   streak: number;
-  streakUnit: "日" | "週" | "回";
+  streakUnit: "日" | "週" | "回" | "ヶ月";
   resting: boolean; // おやすみ中（救済発動中）
   restDaysLeft: number | null; // あと何日でstreakが失われるか（警告用）
   weekDone: number;
@@ -44,7 +44,23 @@ export function computeHabitStats(
   if (rule.type === "every_n_days") {
     return everyNStats(doneSet, today, rule.n);
   }
+  if (rule.type === "times_per_month") {
+    return timesPerMonthStats(doneSet, today, rule.n);
+  }
   return timesPerWeekStats(doneSet, today, rule.n);
+}
+
+// 暦月の月初/月末（YYYY-MM-DD）。delta で前後の月へ。
+function monthStart(ymd: string, delta = 0): string {
+  const [y, m] = ymd.split("-").map(Number);
+  const total = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}-01`;
+}
+function monthEnd(monthStartYmd: string): string {
+  const [y, m] = monthStartYmd.split("-").map(Number);
+  return `${monthStartYmd.slice(0, 7)}-${String(daysInMonth(y, m)).padStart(2, "0")}`;
 }
 
 function dailyStats(doneSet: Set<string>, today: string): HabitStats {
@@ -176,5 +192,45 @@ function timesPerWeekStats(doneSet: Set<string>, today: string, n: number): Habi
     weekAchieved,
     nextLabel: null,
     fourWeekRate: fourWeekRate(doneSet, today, n * 4),
+  };
+}
+
+// 月にn回（暦月）。timesPerWeekStats の月版。streakは連続達成月、おやすみ救済も月単位。
+function timesPerMonthStats(doneSet: Set<string>, today: string, n: number): HabitStats {
+  const thisStart = monthStart(today);
+  const monthDone = countInRange(doneSet, thisStart, today);
+  const monthAchieved = monthDone >= n;
+  const achievedAt = (k: number) => {
+    const s = monthStart(today, -k);
+    return countInRange(doneSet, s, monthEnd(s)) >= n;
+  };
+
+  // 連続達成月。今月は進行中なので達成済みのみ+1。過去月は未達成1回まで許容・2連続で停止
+  let streak = monthAchieved ? 1 : 0;
+  let prevWasMiss = false;
+  for (let k = 1; k < 240; k++) {
+    if (achievedAt(k)) {
+      streak++;
+      prevWasMiss = false;
+    } else {
+      if (prevWasMiss) break;
+      prevWasMiss = true;
+    }
+  }
+
+  // おやすみ: 前月が未達成（救済使用中）で、今月まだ未達成
+  const resting = streak > 0 && !monthAchieved && !achievedAt(1);
+  const restDaysLeft = resting ? diffDays(today, monthEnd(thisStart)) + 1 : null;
+
+  return {
+    streak,
+    streakUnit: "ヶ月",
+    resting,
+    restDaysLeft,
+    weekDone: monthDone,
+    weekTarget: n,
+    weekAchieved: monthAchieved,
+    nextLabel: null,
+    fourWeekRate: fourWeekRate(doneSet, today, n),
   };
 }
