@@ -2,20 +2,27 @@ import type { RecurrenceRule, ReminderRule } from "@/lib/types";
 
 // 期限表記ルール（docs/design.md 2章）:
 // 当日 = 時刻のみ（時刻指定がなければ表示しない）/ 過去・未来 = 「M月D日」＋時刻あれば併記 / 超過は紅
+// late=過去日（「期限超過」チップ用） / overdue=赤字表示用（過去日 or 当日で時刻超過）。
+// nowHM は当日の時刻超過判定に使う現在時刻 "HH:MM"（JST）。省略時は時刻超過を判定しない。
 export function formatDueLabel(
   dueDate: string | null,
   dueTime: string | null,
   today: string,
-): { text: string; late: boolean } | null {
+  nowHM?: string | null,
+): { text: string; late: boolean; overdue: boolean } | null {
   if (!dueDate) return null;
   const time = dueTime ? dueTime.slice(0, 5) : null;
   if (dueDate === today) {
-    return time ? { text: time, late: false } : null;
+    if (!time) return null;
+    const overdue = nowHM != null && time < nowHM;
+    return { text: time, late: false, overdue };
   }
   const [, m, d] = dueDate.split("-").map(Number);
+  const past = dueDate < today;
   return {
     text: `${m}月${d}日${time ? ` ${time}` : ""}`,
-    late: dueDate < today,
+    late: past,
+    overdue: past,
   };
 }
 

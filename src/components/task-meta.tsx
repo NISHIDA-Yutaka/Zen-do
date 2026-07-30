@@ -1,5 +1,6 @@
 "use client";
 
+import { nowHmInJst } from "@/lib/date";
 import { formatDueLabel } from "@/lib/format";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -7,7 +8,7 @@ import { cn } from "@/lib/utils";
 // タスク行のタイトル＋メタ行（docs/design.md 2章）。Today と Inboxの「この先の予定」で共用。
 // メタ行は「先頭に期限、その後にチップ」の順。
 export function TaskMeta({ item, today }: { item: Item; today: string }) {
-  const due = formatDueLabel(item.due_date, item.due_time, today);
+  const due = formatDueLabel(item.due_date, item.due_time, today, nowHmInJst());
   const chips: { text: string; tone: "beni" | "asagi" }[] = [];
   if (due?.late) chips.push({ text: "期限超過", tone: "beni" });
   if (item.recurrence_rule) chips.push({ text: "繰り返し", tone: "asagi" });
@@ -19,7 +20,7 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
       {(due || chips.length > 0) && (
         <span className="mt-0.5 flex items-center gap-2">
           {due && (
-            <span className={cn("text-[11px]", due.late ? "text-beni font-semibold" : "text-nibi")}>
+            <span className={cn("text-[11px]", due.overdue ? "text-beni font-semibold" : "text-nibi")}>
               {due.text}
             </span>
           )}

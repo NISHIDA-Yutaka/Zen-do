@@ -15,6 +15,12 @@ export function todayInJst(now: Date = new Date()): string {
   return `${jst.getUTCFullYear()}-${pad2(jst.getUTCMonth() + 1)}-${pad2(jst.getUTCDate())}`;
 }
 
+/** 与えられた瞬間（既定: 現在）のJSTでの時刻を 'HH:MM' で返す（当日の時刻超過判定用）。 */
+export function nowHmInJst(now: Date = new Date()): string {
+  const jst = new Date(now.getTime() + JST_OFFSET_MS);
+  return `${pad2(jst.getUTCHours())}:${pad2(jst.getUTCMinutes())}`;
+}
+
 function parseYmd(ymd: string): [number, number, number] {
   const [y, m, d] = ymd.split("-").map(Number);
   return [y, m, d];
