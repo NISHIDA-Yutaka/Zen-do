@@ -322,7 +322,7 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
                   >
                     ✓
                   </button>
-                  <span className="text-nibi min-w-0 flex-1 truncate text-sm line-through">
+                  <span className="text-nibi min-w-0 flex-1 text-sm line-through break-words">
                     {item.title}
                   </span>
                 </li>
@@ -337,7 +337,8 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
       )}
 
       {data.habitCandidates.length > 0 && (
-        <section className="bg-kinari mt-6 rounded-2xl px-4 py-3">
+        // スマホ（FAB表示時）は下部の＋ボタンと被らないよう下マージンを確保。PC(fine)は不要
+        <section className="bg-kinari mt-6 mb-24 rounded-2xl px-4 py-3 pointer-fine:mb-0">
           <h2 className="text-nibi text-xs font-semibold">今日の習慣</h2>
           <ul>
             {data.habitCandidates.map((habit) => (

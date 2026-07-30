@@ -186,7 +186,7 @@ export function InboxView() {
                 <button
                   type="button"
                   onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
-                  className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+                  className="min-w-0 flex-1 text-left text-sm font-medium break-words"
                 >
                   {item.title}
                 </button>

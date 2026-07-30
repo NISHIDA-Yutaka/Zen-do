@@ -80,6 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       t: "/today",
       p: "/projects",
       h: "/habits",
+      m: "/notes",
     };
     let gPending = false;
     let gTimer: ReturnType<typeof setTimeout> | undefined;
@@ -170,6 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       startX = null;
       startY = null;
 
+      if (window.matchMedia("(pointer: fine)").matches) return; // PC（狭幅でも）はスワイプ切替しない
       if (window.innerWidth >= 768) return; // 下部ナビが出るスマホ幅のみ
       if (sx <= 28) return; // 左端は左スワイプ用ドロワーに譲る
       if (Date.now() - startT > 600) return; // ゆっくりな動きはスクロール等とみなす

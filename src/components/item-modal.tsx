@@ -411,7 +411,7 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
                       type="button"
                       onClick={() => setStack((s) => [...s, c.id])}
                       className={cn(
-                        "min-w-0 flex-1 truncate text-left text-xs",
+                        "min-w-0 flex-1 text-left text-xs break-words",
                         c.status === "done" && "text-nibi line-through",
                       )}
                     >

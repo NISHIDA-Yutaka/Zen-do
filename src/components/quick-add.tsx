@@ -116,7 +116,7 @@ export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDa
   }
 
   return (
-    <div className="relative hidden md:mt-3 md:block">
+    <div className="relative hidden pointer-fine:mt-3 pointer-fine:block">
       {s.parsed && <SmartPreview parsed={s.parsed} onCancelToken={s.cancelToken} />}
       <form onSubmit={(e) => { e.preventDefault(); add(); }} className="flex items-center gap-2.5 pb-3">
         <span aria-hidden className="text-mikan text-lg font-extrabold">＋</span>
@@ -188,7 +188,7 @@ export function QuickAddFab({ placeholder, onAdd, smart = false, defaultDueDate 
         type="button"
         aria-label="タスクを追加"
         onClick={() => setOpen(true)}
-        className="bg-mikan fixed right-4 bottom-20 z-30 flex size-14 items-center justify-center rounded-full text-2xl font-bold text-white shadow-lg md:hidden"
+        className="bg-mikan fixed right-4 bottom-20 z-30 flex size-14 items-center justify-center rounded-full text-2xl font-bold text-white shadow-lg pointer-fine:hidden"
       >
         ＋
       </button>
@@ -196,11 +196,11 @@ export function QuickAddFab({ placeholder, onAdd, smart = false, defaultDueDate 
         <div
           role="presentation"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-40 bg-black/35 md:hidden"
+          className="fixed inset-0 z-40 bg-black/35 pointer-fine:hidden"
         />
       )}
       {open && (
-        <div className="bg-background fixed inset-x-0 bottom-0 z-50 p-3 pb-4 shadow-2xl md:hidden">
+        <div className="bg-background fixed inset-x-0 bottom-0 z-50 p-3 pb-4 shadow-2xl pointer-fine:hidden">
           {/* プレビューは入力欄の上＝キーボードに隠れない位置（docs/design.md 11.1） */}
           <div className="relative">
             {s.parsed && <SmartPreview parsed={s.parsed} onCancelToken={s.cancelToken} />}

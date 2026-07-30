@@ -15,7 +15,7 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
 
   return (
     <span className="block min-w-0">
-      <span className="block truncate text-sm font-medium">{item.title}</span>
+      <span className="block text-sm font-medium break-words">{item.title}</span>
       {(due || chips.length > 0) && (
         <span className="mt-0.5 flex items-center gap-2">
           {due && (

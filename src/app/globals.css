@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* PC判定は画面幅ではなくポインタ種別で行う（docs/design.md 2章）。
+   fine=マウス/トラックパッド＝狭い横幅でもPC扱い（入力欄はPC常設・スワイプ無効） */
+@custom-variant pointer-fine (@media (pointer: fine));
+
 @theme inline {
   /* Zendo カラートークン（docs/design.md 1章）。色は意味にだけ使う */
   --color-mikan: var(--mikan);
