@@ -480,6 +480,16 @@ PC向けのグローバルショートカット。実装は `AppShell` の windo
 - **無効化条件**: テキスト入力中（activeElement が input/textarea/select/contenteditable）／モーダル表示中（`[role="dialog"]` が存在）／修飾キー併用（⌘/Ctrl/Alt）／IME変換中（`isComposing`）。これらの時は全ショートカットを素通り
 - モバイルの非表示入力欄（`offsetParent === null`）はTのフォーカス対象から除外する
 
+### 18.1 一覧内のタスク選択操作（Today/Inbox・2026-07-30）
+
+タスク一覧をキーボードだけで操作する。実装は `src/lib/use-list-keyboard.ts`（Today/Inbox で共用）。
+
+- 一覧 `<ul>` を `tabIndex=0` にし、**Tab でフォーカスが来たら先頭タスクを選択**（`bg-kinari` でハイライト）
+- **↑↓**: 選択移動（端でクランプ） / **Enter**: 詳細モーダル / **C・Space**: 完了 / **Delete・Backspace**: 破棄（dropped）
+- **入力欄で↑**: 一覧の**最下部**タスクを選択（`QuickAddInline` の `onArrowUp` → `focusList(true)`）
+- 選択中idが完了/破棄で消えたら、描画時に選択を無効化（effectで消さずちらつきを防ぐ）
+- 対象は Today/Inbox のタスク行のみ（Projects/Habits は対象外）
+
 ## 19. PC/タッチの出し分けはポインタ種別で（実装済み・2026-07-29）
 
 PC/モバイルの出し分けを**画面幅（`md:`）ではなくポインタ種別**で行う。PCで横幅を1/3程度に縮めても、マウス/トラックパッド操作である限りPCの操作系（常設入力欄・キーボードショートカット）を維持するため。

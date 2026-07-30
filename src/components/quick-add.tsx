@@ -24,6 +24,8 @@ type QuickAddProps = {
   smart?: boolean;
   /** 日付トークンが無いときの既定期日（Today=今日 / Inbox=なし） */
   defaultDueDate?: string | null;
+  /** 入力欄で↑を押したとき（一覧の最下部タスクを選択させる。docs/design.md 18.1） */
+  onArrowUp?: () => void;
 };
 
 // IME変換確定のEnterで誤送信しないためのガード付きEnterハンドラ
@@ -85,7 +87,7 @@ function buildPayload(
 }
 
 // PC用: リスト末尾の常設入力欄（Today/Inbox共通デザイン。docs/design.md 2章）
-export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDate }: QuickAddProps) {
+export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDate, onArrowUp }: QuickAddProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const s = useSmartInput(text, smart);
@@ -126,7 +128,14 @@ export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDa
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => submitOnEnter(e, add)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" && onArrowUp) {
+              e.preventDefault();
+              onArrowUp();
+              return;
+            }
+            submitOnEnter(e, add);
+          }}
           placeholder={placeholder}
           aria-label={placeholder}
           className="border-wakuiro placeholder:text-nibi/70 focus-visible:border-mikan flex-1 border-b border-dashed bg-transparent pb-1 text-sm outline-none"

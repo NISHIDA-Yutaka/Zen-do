@@ -17,6 +17,8 @@ import {
   UPCOMING_KEY,
 } from "@/lib/client";
 import type { Item } from "@/lib/types";
+import { useListKeyboard } from "@/lib/use-list-keyboard";
+import { cn } from "@/lib/utils";
 
 type ItemResult = { item: Item };
 type ListResult = { items: Item[] };
@@ -128,6 +130,43 @@ export function InboxView() {
     }
   }
 
+  // キーボードのDeleteで破棄（dropped）
+  async function drop(item: Item) {
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutateInbox(
+        async () => {
+          await postJson(`/api/items/${item.id}/drop`);
+          return { items: items.filter((i) => i.id !== item.id) };
+        },
+        {
+          optimisticData: { items: items.filter((i) => i.id !== item.id) },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
+  const { selectedId, listProps, focusList } = useListKeyboard({
+    ids: items.map((i) => i.id),
+    onOpen: (id) => setOpenId(id),
+    onComplete: (id) => {
+      const it = items.find((i) => i.id === id);
+      if (it) void complete(it);
+    },
+    onDrop: (id) => {
+      const it = items.find((i) => i.id === id);
+      if (it) void drop(it);
+    },
+  });
+
   async function triage(item: Item, dueDate: string) {
     setError(null);
     setBusy(item.id, true);
@@ -171,11 +210,17 @@ export function InboxView() {
       ) : items.length === 0 ? (
         <p className="text-nibi py-4 text-sm">未仕分けはありません。身軽ですね。</p>
       ) : (
-        <ul>
+        <ul {...listProps} aria-label="未仕分けタスク">
           {items.map((item) => {
             const busy = busyIds.has(item.id) || item.id.startsWith("temp-");
             return (
-              <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
+              <li
+                key={item.id}
+                className={cn(
+                  "border-keisen flex items-center gap-3 border-b py-3",
+                  selectedId === item.id && "bg-kinari",
+                )}
+              >
                 <button
                   type="button"
                   aria-label={`${item.title}を完了`}
@@ -214,7 +259,7 @@ export function InboxView() {
         </ul>
       )}
 
-      <QuickAddInline placeholder="タスクや思いつきを入力…" onAdd={capture} smart />
+      <QuickAddInline placeholder="タスクや思いつきを入力…" onAdd={capture} smart onArrowUp={() => focusList(true)} />
       <QuickAddFab placeholder="タスクや思いつきを入力…" onAdd={capture} smart />
 
       {upcoming.length > 0 && (

@@ -15,6 +15,8 @@ import {
   TODAY_KEY,
 } from "@/lib/client";
 import type { Habit, Item } from "@/lib/types";
+import { useListKeyboard } from "@/lib/use-list-keyboard";
+import { cn } from "@/lib/utils";
 import { mutate as globalMutate } from "swr";
 
 type TodayData = { date: string; todos: Item[]; habitCandidates: Habit[]; done: Item[] };
@@ -169,6 +171,31 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
+  // キーボードのDeleteで破棄（dropped）。繰り返しは終了・子もまとめて破棄される
+  async function drop(item: Item) {
+    if (!data) return;
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutate(
+        async () => {
+          await postJson(`/api/items/${item.id}/drop`);
+          return undefined;
+        },
+        {
+          optimisticData: { ...data, todos: data.todos.filter((t) => t.id !== item.id) },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
   async function pickHabit(habit: Habit) {
     if (!data) return;
     setError(null);
@@ -238,6 +265,19 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
+  const { selectedId, listProps, focusList } = useListKeyboard({
+    ids: data?.todos.map((t) => t.id) ?? [],
+    onOpen: (id) => setOpenId(id),
+    onComplete: (id) => {
+      const it = data?.todos.find((t) => t.id === id);
+      if (it) void complete(it);
+    },
+    onDrop: (id) => {
+      const it = data?.todos.find((t) => t.id === id);
+      if (it) void drop(it);
+    },
+  });
+
   if (isLoading && !data) return <p className="text-nibi text-sm">読み込み中…</p>;
   if (!data) return <p className="text-beni text-sm">{loadError?.message ?? "読み込みに失敗しました"}</p>;
 
@@ -250,9 +290,15 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
 
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
-      <ul>
+      <ul {...listProps} aria-label="今日のタスク">
         {data.todos.map((item) => (
-          <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
+          <li
+            key={item.id}
+            className={cn(
+              "border-keisen flex items-center gap-3 border-b py-3",
+              selectedId === item.id && "bg-kinari",
+            )}
+          >
             <button
               type="button"
               aria-label={`${item.title}を完了`}
@@ -297,6 +343,7 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
         onAdd={addTodo}
         smart
         defaultDueDate={data.date}
+        onArrowUp={() => focusList(true)}
       />
 
       {data.done.length > 0 && (
