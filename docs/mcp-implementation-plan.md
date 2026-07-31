@@ -2,6 +2,32 @@
 
 作成: 2026-07-31。**仕様は [mcp-integration.md](./mcp-integration.md) が正**（権限方針・ツール一覧・ガードレール）。本書は「どう作るか」の手順書。
 
+## 進捗
+
+- **第1段（参照ツール7種）: 実装・検証済み（2026-07-31）**。`src/lib/mcp/serialize.ts` `src/lib/mcp/queries.ts` `src/app/api/mcp/route.ts`
+- **第2段（操作5種＋ガードレール）: 実装・検証済み（2026-07-31）**。以下を追加:
+  - リファクタ: 完了/取り消しの中核を `src/lib/complete.ts` へ、習慣生成の中核を `src/lib/habit-instance.ts` へ抽出。既存ルート（complete/uncomplete/instantiate）は薄いラッパに。**挙動不変を確認**（アプリ本体ルートで次回生成＋チェックリスト複製＋undo巻き戻しを実機テスト）
+  - `src/lib/mcp/guard.ts`（expected_title 照合・事前条件）、`src/lib/mcp/mutations.ts`（create/complete/uncomplete/set_due/add_habit_today）
+  - E2E検証済み（正常系＋全ガードレール: title不一致拒否・既完了拒否・繰り返しへの期日クリア拒否・存在しないID拒否・習慣二重生成の冪等）。TMPデータは全削除
+  - 既存テスト127件維持・新規lintエラーなし
+- **第3段（認証）: Bearer認証を実装済み（2026-07-31）**。`/api/mcp` を `MCP_TOKEN` によるBearer認証でラップ（cronルートと同じ流儀・フェイルクローズ）:
+  - `MCP_TOKEN` 未設定 → 503（本番にenvを入れるまでMCPは無効）
+  - トークン不一致/未提示 → 401 / 正しいBearer → 通過
+  - ローカル検証済み（401/401/200）。既存＋新規テスト137件（`mcp-serialize.test.ts` 追加）
+  - **本番デプロイ時に必要**: Vercelの環境変数に `MCP_TOKEN`（十分に長いランダム文字列）を設定するまで、`/api/mcp` は503を返し安全。設定後、クライアント（mcp-remote 等）から `Authorization: Bearer <MCP_TOKEN>` を送る
+  - `.claude/launch.json` に `autoPort: true` を追加（ポート3000使用中でも検証サーバーが空きポートで起動できる）
+- 残: 本番Vercelへの `MCP_TOKEN` 設定＋クライアント登録、（必要なら）claude.ai向けOAuth
+
+### 実装中に確定した実API（計画時点から補正）
+
+- パッケージ導入済み: `mcp-handler@^2` / `@modelcontextprotocol/server@^2`
+- **`createMcpHandler` は `mcp-handler` からimport**（実体は `createMcpRouteHandler` のエイリアス）
+- **route.ts に `export const runtime = "nodejs"` が必要**（Supabase SDKのため。これが無いとEdge実行になり得る）
+- `registerTool(name, { title, description, inputSchema: z.object({...}) }, cb)`。`inputSchema` は **`z.object(...)`**（生shapeではない）。引数なしのツールも `z.object({})` を渡す
+- 戻り値は `{ content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] }`
+- レスポンスは**SSE形式**（`event: message\ndata: {...}`）。curl検証は `Accept: application/json, text/event-stream` を付け、`data: ` 行のJSONを取り出す
+- 認証は `withMcpAuth`（`mcp-handler` の named export。第3段で使用）
+
 ## 0. 最初に読むもの
 
 1. [mcp-integration.md](./mcp-integration.md) — 何を作るか（必読）
