@@ -6,6 +6,24 @@ import { formatDueLabel } from "@/lib/format";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+function ClockIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="11"
+      height="11"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="inline-block shrink-0"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // タスク行のタイトル＋メタ行（docs/design.md 2章）。Today と Inboxの「この先の予定」で共用。
 // メタ行は「時刻 → 期限超過 → タグ（無彩色） → 繰り返し/習慣（asagi）」の順。
 export function TaskMeta({ item, today }: { item: Item; today: string }) {
@@ -28,7 +46,13 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
       {(due || chips.length > 0) && (
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {due && (
-            <span className={cn("text-[11px]", due.overdue ? "text-beni font-semibold" : "text-nibi")}>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-[11px]",
+                due.overdue ? "text-beni font-semibold" : "text-nibi",
+              )}
+            >
+              <ClockIcon />
               {due.text}
             </span>
           )}
