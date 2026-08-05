@@ -12,6 +12,7 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
   const due = formatDueLabel(item.due_date, item.due_time, today, nowHmInJst());
   // #memo は内部マーカー（Notes用）なのでチップ表示しない
   const tags = item.tags.filter((t) => t !== MEMO_TAG);
+  const notePreview = item.notes.trim().split("\n")[0]?.trim() ?? "";
   const chips: { text: string; tone: "beni" | "tag" | "asagi" }[] = [];
   if (due?.late) chips.push({ text: "期限超過", tone: "beni" });
   for (const t of tags) chips.push({ text: `#${t}`, tone: "tag" });
@@ -21,6 +22,9 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
   return (
     <span className="block min-w-0">
       <span className="block text-sm font-medium break-words">{item.title}</span>
+      {notePreview && (
+        <span className="text-nibi/80 mt-0.5 block truncate text-[11px]">{notePreview}</span>
+      )}
       {(due || chips.length > 0) && (
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {due && (

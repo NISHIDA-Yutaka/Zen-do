@@ -537,7 +537,11 @@ function TagsRow({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) =>
       }
     >
       <span className="flex flex-wrap items-center gap-1.5">
-        {tags.length === 0 && !adding && <span className="text-nibi/70">なし</span>}
+        {tags.length === 0 && !adding && (
+          <button type="button" onClick={() => setAdding(true)} className="text-nibi/70">
+            なし
+          </button>
+        )}
         {tags.map((t) => (
           <button
             key={t}

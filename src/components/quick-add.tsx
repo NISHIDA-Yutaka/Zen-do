@@ -134,6 +134,11 @@ export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDa
               onArrowUp();
               return;
             }
+            // Escでフォーカスを外し、キーボードショートカットを受け付ける状態へ戻す
+            if (e.key === "Escape") {
+              e.currentTarget.blur();
+              return;
+            }
             submitOnEnter(e, add);
           }}
           placeholder={placeholder}
