@@ -5,6 +5,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { TaskMeta } from "@/components/task-meta";
+import { useContextMenu } from "@/components/task-context-menu";
 import { addDays, todayInJst } from "@/lib/date";
 import {
   getJson,
@@ -167,6 +168,47 @@ export function InboxView() {
     },
   });
 
+  // 「この先の予定」の行操作。明日へは日付更新のみ（予定内に残る）
+  async function shiftUpcomingToTomorrow(item: Item) {
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await patchJson(`/api/items/${item.id}`, { due_date: addDays(today, 1) });
+      await mutateUp();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
+  // 予定から外れる操作（Inboxへ=期限削除 / 削除=破棄）を楽観的に除去して実行
+  async function removeFromUpcoming(item: Item, action: () => Promise<void>, toInbox = false) {
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutateUp(
+        async () => {
+          await action();
+          return undefined;
+        },
+        {
+          optimisticData: { items: upcoming.filter((i) => i.id !== item.id) },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+      if (toInbox) void globalMutate(INBOX_QUERY);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
+  const { open: openMenu, menu } = useContextMenu();
+
   async function triage(item: Item, dueDate: string) {
     setError(null);
     setBusy(item.id, true);
@@ -216,6 +258,15 @@ export function InboxView() {
             return (
               <li
                 key={item.id}
+                onContextMenu={(e) => {
+                  if (busy) return;
+                  // 未仕分けは期限なし＝「Inboxへ」は無意味なので出さない
+                  openMenu(e, [
+                    { label: "明日へ", onSelect: () => triage(item, addDays(today, 1)) },
+                    "separator",
+                    { label: "削除", danger: true, onSelect: () => drop(item) },
+                  ]);
+                }}
                 className={cn(
                   "border-keisen flex items-center gap-3 border-b py-3",
                   selectedId === item.id && "bg-kinari",
@@ -274,7 +325,40 @@ export function InboxView() {
           {upcomingOpen && (
             <ul className="mt-1">
               {upcoming.map((item) => (
-                <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">
+                <li
+                  key={item.id}
+                  onContextMenu={(e) => {
+                    if (busyIds.has(item.id)) return;
+                    openMenu(e, [
+                      { label: "明日へ", onSelect: () => shiftUpcomingToTomorrow(item) },
+                      {
+                        label: "Inboxへ",
+                        onSelect: () =>
+                          removeFromUpcoming(
+                            item,
+                            async () => {
+                              await patchJson(`/api/items/${item.id}`, {
+                                due_date: null,
+                                due_time: null,
+                                recurrence_rule: null,
+                              });
+                            },
+                            true,
+                          ),
+                      },
+                      "separator",
+                      {
+                        label: "削除",
+                        danger: true,
+                        onSelect: () =>
+                          removeFromUpcoming(item, async () => {
+                            await postJson(`/api/items/${item.id}/drop`);
+                          }),
+                      },
+                    ]);
+                  }}
+                  className="border-keisen flex items-center gap-3 border-b py-3"
+                >
                   <button
                     type="button"
                     aria-label={`${item.title}を完了`}
@@ -305,6 +389,8 @@ export function InboxView() {
           }}
         />
       )}
+
+      {menu}
     </section>
   );
 }

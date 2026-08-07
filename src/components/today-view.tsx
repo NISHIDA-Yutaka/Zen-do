@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { TaskMeta } from "@/components/task-meta";
+import { useContextMenu } from "@/components/task-context-menu";
 import {
   getJson,
   HABITS_KEY,
@@ -14,6 +15,7 @@ import {
   revalidateLists,
   TODAY_KEY,
 } from "@/lib/client";
+import { addDays } from "@/lib/date";
 import type { Habit, Item } from "@/lib/types";
 import { useListKeyboard } from "@/lib/use-list-keyboard";
 import { cn } from "@/lib/utils";
@@ -113,21 +115,24 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
-  // 期限超過タスクを当日へ引き上げる（期日を今日に更新）
-  async function assignToday(item: Item) {
+  // 期日を指定日に付け替える。今日=リストに残す（更新のみ）/ それ以外=Todayから外れるので楽観的に除去
+  async function moveDue(item: Item, dueDate: string) {
     if (!data) return;
     setError(null);
     setBusy(item.id, true);
     try {
       await mutate(
         async () => {
-          await patchJson(`/api/items/${item.id}`, { due_date: data.date });
+          await patchJson(`/api/items/${item.id}`, { due_date: dueDate });
           return undefined;
         },
         {
           optimisticData: {
             ...data,
-            todos: data.todos.map((t) => (t.id === item.id ? { ...t, due_date: data.date } : t)),
+            todos:
+              dueDate === data.date
+                ? data.todos.map((t) => (t.id === item.id ? { ...t, due_date: dueDate } : t))
+                : data.todos.filter((t) => t.id !== item.id),
           },
           populateCache: false,
           revalidate: true,
@@ -278,6 +283,8 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     },
   });
 
+  const { open: openMenu, menu } = useContextMenu();
+
   if (isLoading && !data) return <p className="text-nibi text-sm">読み込み中…</p>;
   if (!data) return <p className="text-beni text-sm">{loadError?.message ?? "読み込みに失敗しました"}</p>;
 
@@ -294,6 +301,15 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
         {data.todos.map((item) => (
           <li
             key={item.id}
+            onContextMenu={(e) => {
+              if (item.id.startsWith("temp-")) return;
+              openMenu(e, [
+                { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
+                { label: "Inboxへ", onSelect: () => clearDue(item) },
+                "separator",
+                { label: "削除", danger: true, onSelect: () => drop(item) },
+              ]);
+            }}
             className={cn(
               "border-keisen flex items-center gap-3 border-b py-3",
               selectedId === item.id && "bg-kinari",
@@ -318,7 +334,7 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
                 <button
                   type="button"
                   disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-                  onClick={() => assignToday(item)}
+                  onClick={() => moveDue(item, data.date)}
                   className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
                 >
                   今日へ
@@ -433,6 +449,8 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
           </button>
         </output>
       )}
+
+      {menu}
     </section>
   );
 }
