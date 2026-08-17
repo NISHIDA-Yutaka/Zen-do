@@ -4,6 +4,7 @@ import "server-only";
 import { nowHmInJst, todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { computeHabitStats, type HabitStats } from "@/lib/habit-stats";
+import { loadHabitInstances } from "@/lib/habit-instances";
 import { isPlannerCandidate } from "@/lib/frequency";
 import { getReminders } from "@/lib/items";
 import {
@@ -228,9 +229,7 @@ export async function listHabits(): Promise<{ today: string; habits: McpHabit[] 
     await db.from("habits").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
   ) as Habit[];
 
-  const instances = unwrap(
-    await db.from("items").select("habit_id, status, due_date").not("habit_id", "is", null),
-  ) as { habit_id: string; status: ItemStatus; due_date: string | null }[];
+  const instances = await loadHabitInstances();
 
   const doneByHabit = new Map<string, string[]>();
   const todayByHabit = new Map<string, ItemStatus>();

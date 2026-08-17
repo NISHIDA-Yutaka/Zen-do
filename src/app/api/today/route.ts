@@ -6,6 +6,7 @@ import { handle, json } from "@/lib/api";
 import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { isPlannerCandidate } from "@/lib/frequency";
+import { loadHabitInstances } from "@/lib/habit-instances";
 import type { Habit, Item } from "@/lib/types";
 
 export function GET(): Promise<Response> {
@@ -13,8 +14,9 @@ export function GET(): Promise<Response> {
     const today = todayInJst();
     const todayStartIso = new Date(`${today}T00:00:00+09:00`).toISOString();
 
-    // 独立した5クエリを並列実行する（docs/design.md 17章。直列だと往復が積み上がる）
-    const [todoRes, doneRes, habitRes, logRes, instRes] = await Promise.all([
+    // 独立クエリを並列実行する（docs/design.md 17章。直列だと往復が積み上がる）。
+    // 習慣インスタンスは全件必要（完了ログ＋今日の生成状態）で1000行を越えるためページング取得。
+    const [todoRes, doneRes, habitRes, instances] = await Promise.all([
       db
         .from("items")
         .select("*")
@@ -34,11 +36,10 @@ export function GET(): Promise<Response> {
         .gte("done_at", todayStartIso)
         .order("done_at", { ascending: false }),
       db.from("habits").select("*").eq("is_paused", false),
-      db.from("items").select("habit_id, due_date").eq("status", "done").not("habit_id", "is", null),
-      db.from("items").select("habit_id").eq("due_date", today).not("habit_id", "is", null),
+      loadHabitInstances(),
     ]);
 
-    for (const res of [todoRes, doneRes, habitRes, logRes, instRes]) {
+    for (const res of [todoRes, doneRes, habitRes]) {
       if (res.error) throw new Error(res.error.message);
     }
 
@@ -49,16 +50,16 @@ export function GET(): Promise<Response> {
 
     // 完了ログ = 完了済み習慣インスタンスの due_date 集合（habit_idごと）
     const doneDatesByHabit = new Map<string, string[]>();
-    for (const r of (logRes.data ?? []) as { habit_id: string; due_date: string | null }[]) {
-      if (!r.due_date) continue;
+    for (const r of instances) {
+      if (r.status !== "done" || !r.due_date) continue;
       const arr = doneDatesByHabit.get(r.habit_id) ?? [];
       arr.push(r.due_date);
       doneDatesByHabit.set(r.habit_id, arr);
     }
 
-    // 今日分が既に生成済みの habit_id を除外
+    // 今日分が既に生成済みの habit_id を除外（当日 due_date のインスタンスが存在するもの）
     const instantiated = new Set(
-      (instRes.data ?? []).map((r) => (r as { habit_id: string }).habit_id),
+      instances.filter((r) => r.due_date === today).map((r) => r.habit_id),
     );
 
     const habitCandidates = habits.filter(

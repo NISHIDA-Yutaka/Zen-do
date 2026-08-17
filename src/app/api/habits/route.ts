@@ -5,6 +5,7 @@ import { handle, json, parseBody } from "@/lib/api";
 import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { computeHabitStats, type HabitStats } from "@/lib/habit-stats";
+import { loadHabitInstances } from "@/lib/habit-instances";
 import type { Habit, ItemStatus } from "@/lib/types";
 import { createHabitSchema } from "@/lib/validation";
 
@@ -26,18 +27,8 @@ export function GET(): Promise<Response> {
     if (error) throw new Error(error.message);
     const habits = (data ?? []) as Habit[];
 
-    // 全習慣インスタンスを一括取得（完了ログ＋今日の状態）
-    const { data: instData, error: instErr } = await db
-      .from("items")
-      .select("id, habit_id, status, due_date")
-      .not("habit_id", "is", null);
-    if (instErr) throw new Error(instErr.message);
-    const instances = (instData ?? []) as {
-      id: string;
-      habit_id: string;
-      status: ItemStatus;
-      due_date: string | null;
-    }[];
+    // 全習慣インスタンスを取得（完了ログ＋今日の状態）。1000行上限を越えるためページング取得
+    const instances = await loadHabitInstances();
 
     const doneByHabit = new Map<string, string[]>();
     const todayByHabit = new Map<string, { status: ItemStatus; id: string }>();
