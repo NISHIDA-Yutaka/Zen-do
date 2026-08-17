@@ -16,7 +16,13 @@
   - ローカル検証済み（401/401/200）。既存＋新規テスト137件（`mcp-serialize.test.ts` 追加）
   - **本番デプロイ時に必要**: Vercelの環境変数に `MCP_TOKEN`（十分に長いランダム文字列）を設定するまで、`/api/mcp` は503を返し安全。設定後、クライアント（mcp-remote 等）から `Authorization: Bearer <MCP_TOKEN>` を送る
   - `.claude/launch.json` に `autoPort: true` を追加（ポート3000使用中でも検証サーバーが空きポートで起動できる）
-- 残: 本番Vercelへの `MCP_TOKEN` 設定＋クライアント登録、（必要なら）claude.ai向けOAuth
+- **本番稼働（2026-08-17）**: Vercelに `MCP_TOKEN` 設定済み。`https://zen-dohogesing.vercel.app/api/mcp`（Bearer）を実測確認（なし/誤り→401・正しい→200/12ツール）
+- **パス秘密方式を追加（2026-08-17）**: claude.aiのカスタムコネクタはOAuthのみでヘッダにトークンを付けられないため、URL自体を鍵にする capability URL 方式を追加。
+  - ハンドラ本体を `src/lib/mcp/server.ts`（`mcpHandler` をexport）へ抽出し、2ルートで共用
+  - `src/app/api/mcp/route.ts`＝Bearer（mcp-remote等ヘッダを付けられるクライアント用）／`src/app/api/mcp/[token]/route.ts`＝`MCP_TOKEN` をパス末尾に置く方式（一致→MCP処理・不一致/未設定→404）
+  - claude.ai コネクタには `https://<本番>/api/mcp/<MCP_TOKEN>` をURLだけ登録（OAuth欄は空でよい）。秘密が漏れたら `MCP_TOKEN` をローテーション
+  - ローカルで検証済み（正しいパス→200/12ツール・get_status実データ返却／誤りパス→404／Bearerルートも200維持）。既存テスト137件維持・lint clean
+- 残: claude.ai コネクタ登録（ユーザー実施）。音声モードでツールが呼ばれるかの確認
 
 ### 実装中に確定した実API（計画時点から補正）
 
