@@ -5,7 +5,7 @@ import { DuePicker } from "@/components/due-picker";
 import { ProjectPicker, RecurrenceEditor, ReminderEditor } from "@/components/item-editors";
 import { PushNotice } from "@/components/push-notice";
 import { mutate as globalMutate } from "swr";
-import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists } from "@/lib/client";
+import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists, TODAY_KEY } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { formatDueFull, formatRecurrenceRule } from "@/lib/format";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 type Detail = { item: Item; reminders: Reminder[]; children: Item[]; parent: Item | null };
 type Expanded = "due" | "recur" | "project" | null;
+type StepDest = "child" | "today";
 type PatchResult = { item: Item; reminders: Reminder[] };
 
 // タスク詳細モーダル（docs/design.md 7章）。全リストの行タップで開く・項目ごと自動保存。
@@ -24,6 +25,8 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
   const [notice, setNotice] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Expanded>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [breakdownSteps, setBreakdownSteps] = useState<string[] | null>(null);
+  const [breakdownBusy, setBreakdownBusy] = useState(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const today = todayInJst();
@@ -47,6 +50,7 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
     setExpanded(null);
     setMenuOpen(false);
     setError(null);
+    setBreakdownSteps(null);
     load();
   }, [load]);
 
@@ -139,6 +143,58 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
     try {
       await postJson("/api/items", { title, parent_id: currentId });
       load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  // タスクをベイビーステップに分解（テスト機能）。生成→プレビュー→選んで子ToDo化
+  async function runBreakdown() {
+    setError(null);
+    setBreakdownBusy(true);
+    try {
+      const { steps } = await postJson<{ steps: string[] }>(`/api/items/${currentId}/breakdown`);
+      setBreakdownSteps(steps);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBreakdownBusy(false);
+    }
+  }
+
+  // 追加先: "child"=このタスクの子ToDo / "today"=期日を今日にした独立タスク
+  function stepPayload(title: string, dest: StepDest) {
+    return dest === "today" ? { title, due_date: today } : { title, parent_id: currentId };
+  }
+
+  // 子ToDo追加ならモーダルの子一覧、Today追加ならTodayリストを更新する
+  function afterStepAdd(dest: StepDest) {
+    if (dest === "today") void globalMutate(TODAY_KEY);
+    else load();
+  }
+
+  async function addStepAt(i: number, dest: StepDest) {
+    if (!breakdownSteps) return;
+    const title = breakdownSteps[i];
+    setError(null);
+    try {
+      await postJson("/api/items", stepPayload(title, dest));
+      setBreakdownSteps((s) => (s ? s.filter((_, j) => j !== i) : s));
+      afterStepAdd(dest);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function addAllSteps(dest: StepDest) {
+    if (!breakdownSteps) return;
+    setError(null);
+    try {
+      for (const title of breakdownSteps) {
+        await postJson("/api/items", stepPayload(title, dest));
+      }
+      setBreakdownSteps(null);
+      afterStepAdd(dest);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -421,6 +477,14 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
                 ))}
               </ul>
               <AddChildField onAdd={addChild} />
+              <BreakdownPanel
+                busy={breakdownBusy}
+                steps={breakdownSteps}
+                onRun={runBreakdown}
+                onAddAt={addStepAt}
+                onAddAll={addAllSteps}
+                onDismiss={() => setBreakdownSteps(null)}
+              />
             </section>
           </>
         )}
@@ -576,6 +640,99 @@ function TagsRow({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) =>
         )}
       </span>
     </FieldRow>
+  );
+}
+
+// ベイビーステップ分解のUI（テスト機能）。未生成=ボタン / 生成後=プレビュー。
+// 追加先（子ToDo / Today）をトグルで選び、タップで1件ずつ or 全部追加する。
+function BreakdownPanel({
+  busy,
+  steps,
+  onRun,
+  onAddAt,
+  onAddAll,
+  onDismiss,
+}: {
+  busy: boolean;
+  steps: string[] | null;
+  onRun: () => void;
+  onAddAt: (i: number, dest: StepDest) => void;
+  onAddAll: (dest: StepDest) => void;
+  onDismiss: () => void;
+}) {
+  const [dest, setDest] = useState<StepDest>("child");
+
+  if (steps === null) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onRun}
+        className="text-mikan hit-y mt-2.5 block text-xs font-bold disabled:opacity-50"
+      >
+        {busy ? "分解中…" : "✨ ベイビーステップに分解"}
+      </button>
+    );
+  }
+  if (steps.length === 0) {
+    return (
+      <p className="text-nibi mt-2.5 text-xs">
+        ステップを生成できませんでした。
+        <button type="button" onClick={onRun} className="text-mikan ml-1 font-bold">
+          もう一度
+        </button>
+      </p>
+    );
+  }
+  return (
+    <div className="border-keisen bg-kinari/50 mt-2.5 rounded-xl border p-2.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-nibi text-[11px] font-semibold">AIの提案（タップで追加）</span>
+        <button type="button" onClick={onDismiss} className="text-nibi/60 hover:text-foreground text-xs">
+          ✕
+        </button>
+      </div>
+      <div className="mb-2 flex items-center gap-1.5">
+        <span className="text-nibi text-[10.5px]">追加先</span>
+        <span className="border-keisen inline-flex overflow-hidden rounded-full border text-[10.5px]">
+          {(["child", "today"] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDest(d)}
+              className={cn(
+                "px-2.5 py-0.5 font-semibold",
+                dest === d ? "bg-mikan text-white" : "text-nibi hover:bg-background",
+              )}
+            >
+              {d === "child" ? "子ToDo" : "Today"}
+            </button>
+          ))}
+        </span>
+      </div>
+      <ul>
+        {steps.map((step, i) => (
+          <li key={i}>
+            <button
+              type="button"
+              onClick={() => onAddAt(i, dest)}
+              className="hover:bg-background flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-xs"
+            >
+              <span className="text-mikan font-bold">＋</span>
+              <span className="min-w-0 flex-1 break-words">{step}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-1 flex items-center justify-between px-2">
+        <button type="button" disabled={busy} onClick={onRun} className="text-nibi hover:text-foreground text-[11px] disabled:opacity-50">
+          {busy ? "生成中…" : "作り直す"}
+        </button>
+        <button type="button" onClick={() => onAddAll(dest)} className="text-mikan text-[11px] font-bold">
+          全部追加
+        </button>
+      </div>
+    </div>
   );
 }
 
