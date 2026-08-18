@@ -152,6 +152,33 @@ export async function addHabitToday(habitId: string, expectedTitle: string): Pro
   return summarize(item, message);
 }
 
+export async function updateNotes(
+  id: string,
+  expectedTitle: string,
+  notes: string,
+  append: boolean,
+): Promise<MutationResult> {
+  const g = await loadTaskForWrite(id, expectedTitle);
+  if (!g.ok) return { error: g.message };
+  const item = g.item;
+
+  // append=true かつ既存メモありなら末尾に改行して足す。それ以外は全文置換。
+  const next = append && item.notes.trim() ? `${item.notes.replace(/\s+$/, "")}\n${notes}` : notes;
+
+  const { data, error } = await db
+    .from("items")
+    .update({ notes: next })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  const updated = data as Item;
+
+  const verb = append ? "メモに追記しました" : "メモを更新しました";
+  const shown = next.trim() ? `現在のメモ:\n${next}` : "（メモは空になりました）";
+  return summarize(updated, `「${updated.title}」の${verb}。${shown}`);
+}
+
 // 習慣完了後の「◯日連続」を組み立てる（会話用の副作用説明）。失敗しても致命ではないので握りつぶす。
 async function habitStreakText(habitId: string): Promise<string | null> {
   try {

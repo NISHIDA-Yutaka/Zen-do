@@ -32,6 +32,7 @@
 | `list_inbox` | — | 未仕分け。**滞留日数**付き |
 | `list_upcoming` | `days?` | この先の予定 |
 | `get_task` | `id` | 単体詳細（子ToDo・リマインダー・繰り返し設定） |
+| `get_notes` | `id` | タスクのメモ本文だけを返す（`update_notes` の前段の読み取り用・2026-08-18追加） |
 | `find_task` | `query` | タイトル部分一致で**候補を複数返す**。自動で1件に決めない（4章） |
 | `list_habits` | — | 習慣＋継続指標（ストリーク・今週/今月の進捗）＋今日の候補か |
 
@@ -44,6 +45,7 @@
 | `uncomplete_task` | `id, expected_title` | 次回生成も巻き戻る |
 | `set_due` | `id, expected_title, due_date, due_time?` | `due_date: null` は期日クリア。**繰り返しタスクには拒否** |
 | `add_habit_today` | `habit_id, expected_title` | 習慣を当日タスク化（instantiate）。同日二重生成はDB制約で不可 |
+| `update_notes` | `id, expected_title, notes, append?` | メモを更新。`append: true` で末尾に追記（音声で聞き取った状況の記録用）、既定は全置換（2026-08-18追加） |
 
 ## 3. 返り値スキーマ
 

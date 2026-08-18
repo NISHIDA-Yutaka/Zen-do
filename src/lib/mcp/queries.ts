@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { computeHabitStats, type HabitStats } from "@/lib/habit-stats";
 import { loadHabitInstances } from "@/lib/habit-instances";
 import { isPlannerCandidate } from "@/lib/frequency";
-import { getReminders } from "@/lib/items";
+import { getItem, getReminders } from "@/lib/items";
 import {
   serializeTaskDetail,
   serializeTaskSummary,
@@ -185,6 +185,15 @@ export async function getTaskDetail(id: string): Promise<{ today: string; task: 
     today,
     task: serializeTaskDetail(item, { today, nowHM, reminders, children, childHasChildren }),
   };
+}
+
+/** タスクのメモ本文だけを返す（update_notes の前段の読み取り用）。 */
+export async function getNotes(
+  id: string,
+): Promise<{ id: string; title: string; notes: string; has_notes: boolean } | { error: string }> {
+  const item = await getItem(id);
+  if (!item) return { error: `指定IDのタスクが見つかりません（id=${id}）。find_task で探し直してください。` };
+  return { id: item.id, title: item.title, notes: item.notes, has_notes: item.notes.trim() !== "" };
 }
 
 /** タイトル部分一致で候補を複数返す（自動で1件に絞らない）。未完了を優先。 */

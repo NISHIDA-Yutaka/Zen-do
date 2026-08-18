@@ -9,9 +9,11 @@ import {
   createTask,
   setDue,
   uncompleteTask,
+  updateNotes,
 } from "@/lib/mcp/mutations";
 import {
   findTask,
+  getNotes,
   getStatus,
   getTaskDetail,
   listHabits,
@@ -100,6 +102,17 @@ export const mcpHandler = createMcpHandler((server) => {
       if (!res) return ok({ error: "指定IDのタスクが見つかりません", id });
       return ok(res);
     },
+  );
+
+  server.registerTool(
+    "get_notes",
+    {
+      title: "メモを読む",
+      description:
+        "タスクの現在のメモ本文を返す。メモを書き換える前に、まずこれで現状を読むこと（update_notes の前段）。",
+      inputSchema: z.object({ id: z.string().uuid().describe("タスクのUUID") }),
+    },
+    async ({ id }) => ok(await getNotes(id)),
   );
 
   server.registerTool(
@@ -198,5 +211,24 @@ export const mcpHandler = createMcpHandler((server) => {
       inputSchema: z.object({ habit_id: z.string().uuid(), expected_title: expectedTitle }),
     },
     async ({ habit_id, expected_title }) => ok(await addHabitToday(habit_id, expected_title)),
+  );
+
+  server.registerTool(
+    "update_notes",
+    {
+      title: "メモを更新",
+      description:
+        "タスクのメモ（notes）を書き換える。append=true で既存メモの末尾に追記（会話で聞き取った状況や不足情報の記録に使う）、" +
+        "append=false（既定）で全文置換。全置換の前は get_notes で現状を読むこと。" +
+        "id は find_task/list_* で得たものを使い、expected_title に現在のタイトルを渡す（取り違え防止）。",
+      inputSchema: z.object({
+        id: z.string().uuid(),
+        expected_title: expectedTitle,
+        notes: z.string().max(8000).describe("append=true なら追記する文、false なら置き換える全文"),
+        append: z.boolean().optional().describe("true=末尾に追記 / false（既定）=全文置換"),
+      }),
+    },
+    async ({ id, expected_title, notes, append }) =>
+      ok(await updateNotes(id, expected_title, notes, append ?? false)),
   );
 });
