@@ -84,6 +84,14 @@ const DATE_MATCHERS: Matcher[] = [
     build: (_m, today) => ({ kind: "date", label: `今日 ${labelOf(today)}`, value: today }),
   },
   {
+    // 「来週」= 登録日から1週間後（+7日）。曜日指定は伴わないシンプルな解釈
+    re: /来週/g,
+    build: (_m, today) => {
+      const v = addDays(today, 7);
+      return { kind: "date", label: `来週 ${labelOf(v)}`, value: v };
+    },
+  },
+  {
     re: /(\d{1,2})月(\d{1,2})日?/g,
     build: (m, today) => {
       const v = resolveMonthDay(Number(m[1]), Number(m[2]), today);

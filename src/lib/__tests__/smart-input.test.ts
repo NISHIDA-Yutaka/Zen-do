@@ -16,6 +16,11 @@ describe("相対日付", () => {
     expect(parse("歯医者 明日").dueDate).toBe("2026-07-18");
     expect(parse("歯医者 明後日").dueDate).toBe("2026-07-19");
   });
+  it("来週は登録日から1週間後（+7日）", () => {
+    // 2026-07-17（金）+7日
+    expect(parse("資料作成 来週").dueDate).toBe("2026-07-24");
+    expect(parse("資料作成 来週").title).toBe("資料作成");
+  });
   it("解釈部分はタイトルから除かれる", () => {
     expect(parse("歯医者の予約 明日").title).toBe("歯医者の予約");
   });
