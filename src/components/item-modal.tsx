@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DuePicker } from "@/components/due-picker";
 import { ProjectPicker, RecurrenceEditor, ReminderEditor } from "@/components/item-editors";
+import { Markdown } from "@/components/markdown";
 import { PushNotice } from "@/components/push-notice";
 import { mutate as globalMutate } from "swr";
 import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists, TODAY_KEY } from "@/lib/client";
@@ -558,21 +559,87 @@ function TitleField({
   );
 }
 
+// メモ編集中の Tab=インデント / Shift+Tab=解除（1段＝タブ1つ・docs/design.md 13.4）。
+// execCommand を使うのは、ブラウザ標準の取り消し履歴（Ctrl+Z）を壊さないため。
+function indentOnTab(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  if (e.key !== "Tab" || e.nativeEvent.isComposing) return;
+  e.preventDefault();
+  const ta = e.currentTarget;
+  const { value, selectionStart: start, selectionEnd: end } = ta;
+
+  // 範囲選択していないTabは、その場にタブを差し込むだけ
+  if (start === end && !e.shiftKey) {
+    document.execCommand("insertText", false, "\t");
+    return;
+  }
+
+  // 選択が触れている行をまとめて増減させる
+  const from = value.lastIndexOf("\n", start - 1) + 1;
+  const nextBreak = value.indexOf("\n", end);
+  const to = nextBreak === -1 ? value.length : nextBreak;
+  const block = value.slice(from, to);
+  const indented = block
+    .split("\n")
+    .map((line) => (e.shiftKey ? line.replace(/^(\t| {1,2})/, "") : `\t${line}`))
+    .join("\n");
+  if (indented === block) return;
+
+  ta.setSelectionRange(from, to);
+  document.execCommand("insertText", false, indented);
+  ta.setSelectionRange(from, from + indented.length);
+}
+
+// メモはMarkdown（docs/design.md 7.2）。普段は整形して表示し、タップでtextarea編集に切り替える。
+// フォーカスを外した時点で保存し、また整形表示に戻る。
 function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => void }) {
   const [v, setV] = useState(notes);
+  const [editing, setEditing] = useState(false);
   useEffect(() => setV(notes), [notes]);
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          if (v !== notes) onSave(v);
+        }}
+        onKeyDown={(e) => {
+          // Enterで確定（blur→保存）。本来の改行は Shift+Enter が担う。
+          // IME変換確定のEnterで閉じないよう isComposing を除外する。
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            e.currentTarget.blur();
+            return;
+          }
+          indentOnTab(e);
+        }}
+        placeholder="メモを書く…（Shift+Enterで改行 / Enterで確定）"
+        aria-label="メモ"
+        rows={6}
+        // field-sizing-content で中身の量に合わせて伸びる（未対応ブラウザは rows=6 のまま）
+        className="border-keisen placeholder:text-nibi/60 focus:border-mikan mx-4 mt-3 max-h-[60vh] min-h-24 resize-y overflow-y-auto rounded-xl border px-3 py-2 font-mono text-xs tab-2 outline-none field-sizing-content"
+      />
+    );
+  }
   return (
-    <textarea
-      value={v}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => {
-        if (v !== notes) onSave(v);
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="メモを編集"
+      onClick={() => setEditing(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setEditing(true);
+        }
       }}
-      placeholder="メモを書く…"
-      aria-label="メモ"
-      rows={3}
-      className="border-keisen placeholder:text-nibi/60 focus:border-mikan mx-4 mt-3 resize-y rounded-xl border px-3 py-2 text-xs outline-none"
-    />
+      className="border-keisen hover:border-wakuiro focus-visible:border-mikan mx-4 mt-3 min-h-14 cursor-text rounded-xl border px-3 py-2 outline-none"
+    >
+      {notes.trim() ? <Markdown text={notes} /> : <span className="text-nibi/60 text-xs">メモを書く…</span>}
+    </div>
   );
 }
 

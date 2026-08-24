@@ -15,6 +15,7 @@ import {
 } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { formatDueLabel } from "@/lib/format";
+import { notesPreview } from "@/lib/markdown";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +26,6 @@ const PLACEHOLDER = "メモを追加…（#memo が自動で付きます）";
 
 function byUpdatedDesc(items: Item[]): Item[] {
   return [...items].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-}
-
-// 本文の冒頭1行だけを行プレビューに出す（docs/design.md 13.2）
-function firstLine(notes: string): string {
-  return notes.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
 }
 
 // Notes = #memo タグ付きタスクの一覧（docs/design.md 13章）。専用の実体は持たない。
@@ -152,7 +148,7 @@ export function NotesView() {
         <ul>
           {notes.map((item) => {
             const due = formatDueLabel(item.due_date, item.due_time, today);
-            const preview = firstLine(item.notes);
+            const preview = notesPreview(item.notes);
             const busy = busyIds.has(item.id) || item.id.startsWith("temp-");
             return (
               <li key={item.id} className="border-keisen flex items-center gap-3 border-b py-3">

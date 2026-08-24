@@ -3,6 +3,7 @@
 import { MEMO_TAG } from "@/lib/client";
 import { nowHmInJst } from "@/lib/date";
 import { formatDueLabel } from "@/lib/format";
+import { notesPreview } from "@/lib/markdown";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +31,7 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
   const due = formatDueLabel(item.due_date, item.due_time, today, nowHmInJst());
   // #memo は内部マーカー（Notes用）なのでチップ表示しない
   const tags = item.tags.filter((t) => t !== MEMO_TAG);
-  const notePreview = item.notes.trim().split("\n")[0]?.trim() ?? "";
+  const notePreview = notesPreview(item.notes);
   const chips: { text: string; tone: "beni" | "tag" | "asagi" }[] = [];
   if (due?.late) chips.push({ text: "期限超過", tone: "beni" });
   for (const t of tags) chips.push({ text: `#${t}`, tone: "tag" });
