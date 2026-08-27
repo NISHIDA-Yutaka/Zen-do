@@ -5,7 +5,13 @@ import type { Item } from "@/lib/types";
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
+  // 502/503のHTMLページなどJSON以外が返ることがあるので、パース失敗で落とさない
+  let body: { error?: string } | null = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    if (res.ok) throw new Error("応答を解釈できませんでした");
+  }
   if (!res.ok) {
     throw new Error(body?.error ?? `リクエストに失敗しました (${res.status})`);
   }

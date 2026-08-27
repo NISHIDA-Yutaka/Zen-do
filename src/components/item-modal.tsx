@@ -8,6 +8,7 @@ import { PushNotice } from "@/components/push-notice";
 import { mutate as globalMutate } from "swr";
 import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists, TODAY_KEY } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
+import { isFinePointer } from "@/lib/pointer";
 import { formatDueFull, formatRecurrenceRule } from "@/lib/format";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -589,14 +590,18 @@ function indentOnTab(e: React.KeyboardEvent<HTMLTextAreaElement>) {
   ta.setSelectionRange(from, from + indented.length);
 }
 
-// メモはMarkdown（docs/design.md 7.2）。普段は整形して表示し、タップでtextarea編集に切り替える。
+// メモはMarkdown（docs/design.md 7.2 / 13.4）。普段は整形して表示し、タップでtextarea編集に切り替える。
 // フォーカスを外した時点で保存し、また整形表示に戻る。
+// PC は Enter=確定 / Shift+Enter=改行。タッチ端末は Enter をそのまま改行に使う
+// （ソフトキーボードの改行キーで確定してしまうと、複数行メモが書けないため）。
 function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => void }) {
   const [v, setV] = useState(notes);
   const [editing, setEditing] = useState(false);
   useEffect(() => setV(notes), [notes]);
 
   if (editing) {
+    // この分岐は操作後にしか描画されないので、ここでポインタ種別を読んでも初期描画とずれない
+    const fine = isFinePointer();
     return (
       <textarea
         autoFocus
@@ -607,20 +612,20 @@ function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => v
           if (v !== notes) onSave(v);
         }}
         onKeyDown={(e) => {
-          // Enterで確定（blur→保存）。本来の改行は Shift+Enter が担う。
-          // IME変換確定のEnterで閉じないよう isComposing を除外する。
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          // PCのみ Enterで確定（blur→保存）。IME変換確定のEnterでは閉じない
+          if (fine && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             e.currentTarget.blur();
             return;
           }
           indentOnTab(e);
         }}
-        placeholder="メモを書く…（Shift+Enterで改行 / Enterで確定）"
+        placeholder={fine ? "メモを書く…（Shift+Enterで改行 / Enterで確定）" : "メモを書く…（Markdownが使えます）"}
         aria-label="メモ"
         rows={6}
-        // field-sizing-content で中身の量に合わせて伸びる（未対応ブラウザは rows=6 のまま）
-        className="border-keisen placeholder:text-nibi/60 focus:border-mikan mx-4 mt-3 max-h-[60vh] min-h-24 resize-y overflow-y-auto rounded-xl border px-3 py-2 font-mono text-xs tab-2 outline-none field-sizing-content"
+        // field-sizing-content で中身の量に合わせて伸びる（未対応ブラウザは rows=6 のまま）。
+        // shrink-0 は、縦に詰まった時にモーダルのflexに押し潰されて中身がはみ出すのを防ぐ
+        className="border-keisen placeholder:text-nibi/60 focus:border-mikan mx-4 mt-3 max-h-[60vh] min-h-24 shrink-0 resize-y overflow-y-auto rounded-xl border px-3 py-2 font-mono text-xs tab-2 outline-none field-sizing-content"
       />
     );
   }
@@ -636,7 +641,8 @@ function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => v
           setEditing(true);
         }
       }}
-      className="border-keisen hover:border-wakuiro focus-visible:border-mikan mx-4 mt-3 min-h-14 cursor-text rounded-xl border px-3 py-2 outline-none"
+      // shrink-0: モーダルのflexで潰されると本文が枠外へあふれ、子ToDoに重なる（2026-08-27）
+      className="border-keisen hover:border-wakuiro focus-visible:border-mikan mx-4 mt-3 min-h-14 shrink-0 cursor-text rounded-xl border px-3 py-2 outline-none"
     >
       {notes.trim() ? <Markdown text={notes} /> : <span className="text-nibi/60 text-xs">メモを書く…</span>}
     </div>

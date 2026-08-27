@@ -9,44 +9,63 @@ import { isPlannerCandidate } from "@/lib/frequency";
 import { loadHabitInstances } from "@/lib/habit-instances";
 import type { Habit, Item } from "@/lib/types";
 
+// GETは副作用がないので、失敗したら一度だけ取り直す。
+// 本番でコールドスタート直後の1回目だけ500になる事象があり（2回目以降は同じインスタンスで成功する）、
+// アプリ起動直後にエラー画面が出ていた。原因の特定にはサーバーログが要るため、まずは緩和策。
+async function retryOnce<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.warn("[today] 1回目の取得に失敗したため再試行します:", err);
+    return fn();
+  }
+}
+
+// 独立クエリを並列実行する（docs/design.md 17章。直列だと往復が積み上がる）。
+// 習慣インスタンスは全件必要（完了ログ＋今日の生成状態）で1000行を越えるためページング取得。
+async function fetchTodayData(today: string, todayStartIso: string) {
+  const [todoRes, doneRes, habitRes, instances] = await Promise.all([
+    db
+      .from("items")
+      .select("*")
+      .eq("kind", "todo")
+      .eq("status", "todo")
+      .lte("due_date", today)
+      // 期限の早い順に上から並べる。同日内は時刻指定ありを昇順で先に、
+      // 時刻指定なし(NULL)は下にまとめ、その中は登録順(sort_order)
+      .order("due_date", { ascending: true })
+      .order("due_time", { ascending: true, nullsFirst: false })
+      .order("sort_order", { ascending: true }),
+    db
+      .from("items")
+      .select("*")
+      .eq("kind", "todo")
+      .eq("status", "done")
+      .gte("done_at", todayStartIso)
+      .order("done_at", { ascending: false }),
+    db.from("habits").select("*").eq("is_paused", false),
+    loadHabitInstances(),
+  ]);
+
+  for (const res of [todoRes, doneRes, habitRes]) {
+    if (res.error) throw new Error(res.error.message);
+  }
+  return {
+    todos: (todoRes.data ?? []) as Item[],
+    done: (doneRes.data ?? []) as Item[],
+    habits: (habitRes.data ?? []) as Habit[],
+    instances,
+  };
+}
+
 export function GET(): Promise<Response> {
   return handle(async () => {
     const today = todayInJst();
     const todayStartIso = new Date(`${today}T00:00:00+09:00`).toISOString();
 
-    // 独立クエリを並列実行する（docs/design.md 17章。直列だと往復が積み上がる）。
-    // 習慣インスタンスは全件必要（完了ログ＋今日の生成状態）で1000行を越えるためページング取得。
-    const [todoRes, doneRes, habitRes, instances] = await Promise.all([
-      db
-        .from("items")
-        .select("*")
-        .eq("kind", "todo")
-        .eq("status", "todo")
-        .lte("due_date", today)
-        // 期限の早い順に上から並べる。同日内は時刻指定ありを昇順で先に、
-        // 時刻指定なし(NULL)は下にまとめ、その中は登録順(sort_order)
-        .order("due_date", { ascending: true })
-        .order("due_time", { ascending: true, nullsFirst: false })
-        .order("sort_order", { ascending: true }),
-      db
-        .from("items")
-        .select("*")
-        .eq("kind", "todo")
-        .eq("status", "done")
-        .gte("done_at", todayStartIso)
-        .order("done_at", { ascending: false }),
-      db.from("habits").select("*").eq("is_paused", false),
-      loadHabitInstances(),
-    ]);
-
-    for (const res of [todoRes, doneRes, habitRes]) {
-      if (res.error) throw new Error(res.error.message);
-    }
-
-    const todos = (todoRes.data ?? []) as Item[];
-    const done = (doneRes.data ?? []) as Item[];
-    // 非pause習慣のうち、完了ログ由来の頻度判定（docs/design.md 10.1）で今日が候補のもの
-    const habits = (habitRes.data ?? []) as Habit[];
+    const { todos, done, habits, instances } = await retryOnce(() =>
+      fetchTodayData(today, todayStartIso),
+    );
 
     // 完了ログ = 完了済み習慣インスタンスの due_date 集合（habit_idごと）
     const doneDatesByHabit = new Map<string, string[]>();
@@ -62,6 +81,7 @@ export function GET(): Promise<Response> {
       instances.filter((r) => r.due_date === today).map((r) => r.habit_id),
     );
 
+    // 非pause習慣のうち、完了ログ由来の頻度判定（docs/design.md 10.1）で今日が候補のもの
     const habitCandidates = habits.filter(
       (h) =>
         !instantiated.has(h.id) &&

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { isFinePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
 export type ContextMenuItem =
@@ -9,15 +10,11 @@ export type ContextMenuItem =
 
 type MenuState = { x: number; y: number; items: ContextMenuItem[] } | null;
 
-// PC（マウス）専用。タッチ長押し由来の contextmenu は素通りさせる（19章のポインタ判定に合わせる）
-const isFinePointer = () =>
-  typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
-
 export function useContextMenu() {
   const [state, setState] = useState<MenuState>(null);
 
   const open = useCallback((e: React.MouseEvent, items: ContextMenuItem[]) => {
-    if (!isFinePointer()) return;
+    if (!isFinePointer()) return; // タッチ長押し由来の contextmenu は素通りさせる
     e.preventDefault();
     setState({ x: e.clientX, y: e.clientY, items });
   }, []);
