@@ -13,6 +13,8 @@ export interface CalendarEvent {
   end?: string;
   allDay: boolean;
   editable: boolean;
+  // 終日欄のイベントは横に伸ばせてしまうが、日をまたぐ長さは表現できないので禁じる
+  durationEditable: boolean;
   classNames: string[];
   // 所要時間が未設定＝仮の長さで描いていることを行側で示すためのフラグ
   extendedProps: { estimated: boolean; status: Item["status"] };
@@ -66,6 +68,7 @@ export function toEvent(item: Item, today: string): CalendarEvent | null {
       ...base,
       start: item.due_date,
       allDay: true,
+      durationEditable: false,
       extendedProps: { estimated: false, status: item.status },
     };
   }
@@ -78,6 +81,7 @@ export function toEvent(item: Item, today: string): CalendarEvent | null {
     start: `${item.due_date}T${start}:00`,
     end: `${end.date}T${end.time}:00`,
     allDay: false,
+    durationEditable: !done,
     extendedProps: { estimated, status: item.status },
   };
 }
@@ -89,4 +93,10 @@ export function toEvents(items: Item[], today: string): CalendarEvent[] {
 /** 表示範囲のitems取得キー。完了分も描くので statuses を明示する（docs/calendar-plan.md 2章） */
 export function rangeQuery(from: string, to: string): string {
   return `/api/items?kind=todo&statuses=todo,done&due_from=${from}&due_to=${to}`;
+}
+
+/** リサイズ後の長さ（分）。DBのCHECK制約（1〜1440）に収まるよう丸める */
+export function durationFromRange(start: Date, end: Date): number {
+  const minutes = Math.round((end.getTime() - start.getTime()) / 60_000);
+  return Math.min(1440, Math.max(1, minutes));
 }

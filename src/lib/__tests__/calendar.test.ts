@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addMinutes, DEFAULT_BLOCK_MIN, rangeQuery, toEvent, toEvents } from "@/lib/calendar";
+import {
+  addMinutes,
+  DEFAULT_BLOCK_MIN,
+  durationFromRange,
+  rangeQuery,
+  toEvent,
+  toEvents,
+} from "@/lib/calendar";
 import type { Item } from "@/lib/types";
 
 const TODAY = "2026-08-28";
@@ -107,6 +114,14 @@ describe("toEvent", () => {
     expect(toEvent(makeItem({}), TODAY)?.editable).toBe(true);
   });
 
+  it("終日イベントは長さを変えられない（日をまたぐ長さを表現できないため）", () => {
+    expect(toEvent(makeItem({ due_time: null }), TODAY)?.durationEditable).toBe(false);
+    expect(toEvent(makeItem({ due_time: "09:00:00" }), TODAY)?.durationEditable).toBe(true);
+    expect(
+      toEvent(makeItem({ due_time: "09:00:00", status: "done" }), TODAY)?.durationEditable,
+    ).toBe(false);
+  });
+
   it("習慣は asagi、期限超過は beni で描き分ける", () => {
     expect(toEvent(makeItem({ habit_id: "h1" }), TODAY)?.classNames).toContain("zd-ev-habit");
     expect(toEvent(makeItem({ due_date: "2026-08-27" }), TODAY)?.classNames).toContain(
@@ -118,6 +133,23 @@ describe("toEvent", () => {
   it("完了は習慣・期限超過より優先する（済んだものは履歴として一様に見せる）", () => {
     const ev = toEvent(makeItem({ status: "done", habit_id: "h1", due_date: "2026-08-20" }), TODAY);
     expect(ev?.classNames).toEqual(["zd-ev", "zd-ev-done"]);
+  });
+});
+
+describe("durationFromRange", () => {
+  const at = (h: number, m = 0) => new Date(2026, 7, 28, h, m);
+
+  it("開始と終了の差を分で返す", () => {
+    expect(durationFromRange(at(9), at(10, 30))).toBe(90);
+  });
+
+  it("0以下にはしない（DBのCHECK制約に合わせる）", () => {
+    expect(durationFromRange(at(9), at(9))).toBe(1);
+    expect(durationFromRange(at(10), at(9))).toBe(1);
+  });
+
+  it("24時間を超えたら丸める", () => {
+    expect(durationFromRange(new Date(2026, 7, 28, 9), new Date(2026, 7, 30, 9))).toBe(1440);
   });
 });
 
