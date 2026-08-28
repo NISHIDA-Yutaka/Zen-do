@@ -193,3 +193,63 @@
     inset: calc(var(--spacing) * -2.5) 0;
   }
 }
+/* カレンダー（docs/calendar-plan.md 4章）。FullCalendarは --fc-* 変数でテーマ変更できるので、
+   Zendoのトークンを割り当てるだけにする。クラスへの上書きは色分けと余白の最小限に留める */
+.zd-cal {
+  --fc-border-color: var(--keisen);
+  --fc-page-bg-color: var(--background);
+  --fc-neutral-bg-color: var(--kinari);
+  /* 今日の列はカード（mikan-soft）と同色になり見分けが付かないので塗らない。現在時刻の線で示す */
+  --fc-today-bg-color: var(--background);
+  --fc-now-indicator-color: var(--mikan);
+  /* 文字色は内側の .fc-event-main がこの変数から解決するので、クラスのcolorでは上書きできない */
+  --fc-event-text-color: var(--foreground);
+  --fc-event-bg-color: var(--mikan-soft);
+  --fc-event-border-color: var(--keisen);
+  --fc-button-text-color: var(--foreground);
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: var(--wakuiro);
+  --fc-button-hover-bg-color: var(--kinari);
+  --fc-button-hover-border-color: var(--wakuiro);
+  --fc-button-active-bg-color: var(--mikan-soft);
+  --fc-button-active-border-color: var(--mikan);
+  --fc-small-font-size: 0.6875rem;
+  font-size: 0.8125rem;
+}
+
+/* 既定は控えめに（帯を塗らず左端の色線で種別を示す） */
+.zd-cal .zd-ev {
+  border-color: var(--keisen);
+  border-left: 3px solid var(--mikan);
+  background-color: var(--mikan-soft);
+  color: var(--foreground);
+  border-radius: 0.25rem;
+}
+.zd-cal .zd-ev-habit {
+  border-left-color: var(--asagi);
+  background-color: var(--asagi-soft);
+}
+.zd-cal .zd-ev-overdue {
+  border-left-color: var(--beni);
+  background-color: var(--beni-soft);
+}
+.zd-cal .zd-ev-done {
+  --fc-event-text-color: var(--nibi);
+  border-left-color: var(--wakuiro);
+  background-color: var(--kinari);
+  color: var(--nibi);
+}
+.zd-cal .zd-ev-done .fc-event-title {
+  text-decoration: line-through;
+}
+
+/* ツールバーはスマホで折り返す前提。詰まりすぎないよう間隔だけ整える */
+.zd-cal .fc-toolbar.fc-header-toolbar {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.zd-cal .fc-toolbar-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}

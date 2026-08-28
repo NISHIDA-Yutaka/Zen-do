@@ -14,6 +14,7 @@ const MENU_ITEMS = [
   { href: "/projects", label: "Projects" },
   { href: "/habits", label: "Habits" },
   { href: "/notes", label: "Notes" },
+  { href: "/calendar", label: "Calendar" },
 ];
 
 const BOTTOM_NAV = MENU_ITEMS.slice(0, 4);
