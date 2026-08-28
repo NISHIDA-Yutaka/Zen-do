@@ -12,7 +12,7 @@
 
 ## 1. データモデル
 
-migration `supabase/migrations/20260828000001_duration.sql`:
+migration `supabase/migrations/20260828000001_item_duration.sql`:
 
 ```sql
 alter table items add column duration_min integer
@@ -31,7 +31,7 @@ comment on column items.duration_min is '所要時間（分）。カレンダー
 
 - `due_from=YYYY-MM-DD` → `.gte("due_date", ...)`
 - `due_to=YYYY-MM-DD` → `.lte("due_date", ...)`
-- `statuses=todo,done` → `.in("status", ...)`（省略時は従来どおり todo のみ。dropped は常に除外）
+- `statuses=todo,done` → `.in("status", ...)`。**省略時は従来どおり絞り込まない**（既存呼び出しの挙動を変えないため。status指定なしだと dropped も返る）ので、カレンダーは必ず `statuses=todo,done` を渡す
 
 カレンダーは表示中の範囲が変わるたび（FullCalendar の `datesSet`）にこのクエリをSWRキーとして取得する。習慣インスタンスも items 行なので自動的に含まれる。
 

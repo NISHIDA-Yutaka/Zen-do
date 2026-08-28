@@ -44,6 +44,7 @@ export async function completeItem(item: Item): Promise<{ item: Item; next: Item
       habit_id: item.habit_id,
       due_date: nextDue,
       due_time: item.due_time,
+      duration_min: item.duration_min,
       recurrence_rule: item.recurrence_rule,
       sort_order: item.sort_order,
       status: "todo" as const,

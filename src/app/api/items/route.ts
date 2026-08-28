@@ -1,4 +1,4 @@
-// GET /api/items  — 一覧（クエリで絞り込み）
+// GET /api/items  — 一覧（クエリで絞り込み。kind/status/statuses/parent_id/due_on/due_before/due_after/due_from/due_to/tag/exclude_tag）
 // POST /api/items — 作成（クイックキャプチャ含む。既定 kind='todo'）
 import type { NextRequest } from "next/server";
 import { badRequest, handle, json, parseBody } from "@/lib/api";
@@ -19,6 +19,14 @@ export function GET(req: NextRequest): Promise<Response> {
     const status = q.get("status");
     if (status) query = query.eq("status", status);
 
+    // statuses=todo,done — カレンダーは完了分も描くため複数状態を取る（docs/calendar-plan.md 2章）。
+    // 省略時は従来どおり絞り込まない（droppedも含む）ので、呼ぶ側が必要な状態を明示する
+    const statuses = q.get("statuses");
+    if (statuses) {
+      const list = statuses.split(",").filter(Boolean);
+      if (list.length > 0) query = query.in("status", list);
+    }
+
     // parent_id=null で最上位のみ、UUID指定でその子
     const parentId = q.get("parent_id");
     if (parentId === "null") query = query.is("parent_id", null);
@@ -35,6 +43,12 @@ export function GET(req: NextRequest): Promise<Response> {
     // due_after は「この先の予定」用（docs/design.md 12.5）
     const dueAfter = q.get("due_after");
     if (dueAfter) query = query.gt("due_date", dueAfter);
+
+    // due_from / due_to は期間指定（カレンダーの表示範囲。両端を含む）
+    const dueFrom = q.get("due_from");
+    if (dueFrom) query = query.gte("due_date", dueFrom);
+    const dueTo = q.get("due_to");
+    if (dueTo) query = query.lte("due_date", dueTo);
 
     const tag = q.get("tag");
     if (tag) query = query.contains("tags", [tag]);
@@ -73,6 +87,7 @@ export function POST(req: NextRequest): Promise<Response> {
       parent_id: body.parent_id ?? null,
       due_date: dueDate,
       due_time: dueTime,
+      duration_min: body.duration_min ?? null,
       recurrence_rule: body.recurrence_rule ?? null,
       captured_raw: body.captured_raw ?? null,
     };

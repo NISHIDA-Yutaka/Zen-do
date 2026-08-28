@@ -11,6 +11,8 @@ const datetimeString = z
   .string()
   .refine((s) => !Number.isNaN(Date.parse(s)), "解釈可能な日時文字列を指定してください");
 
+const durationMin = z.number().int().min(1).max(1440);
+
 // --- 繰り返しルール ---
 export const recurrenceRuleSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("daily") }),
@@ -51,6 +53,7 @@ export const createItemSchema = z.object({
   parent_id: z.string().uuid().nullable().optional(),
   due_date: dateString.nullable().optional(),
   due_time: timeString.nullable().optional(),
+  duration_min: durationMin.nullable().optional(),
   recurrence_rule: recurrenceRuleSchema.nullable().optional(),
   reminders: z.array(reminderRuleSchema).optional(),
   captured_raw: z.string().nullable().optional(),
@@ -66,6 +69,7 @@ export const updateItemSchema = z.object({
   parent_id: z.string().uuid().nullable().optional(),
   due_date: dateString.nullable().optional(),
   due_time: timeString.nullable().optional(),
+  duration_min: durationMin.nullable().optional(),
   recurrence_rule: recurrenceRuleSchema.nullable().optional(),
   sort_order: z.number().optional(),
   reminders: z.array(reminderRuleSchema).optional(),

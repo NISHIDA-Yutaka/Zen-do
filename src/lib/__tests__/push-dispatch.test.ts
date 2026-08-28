@@ -21,6 +21,7 @@ function item(over: Partial<Item> = {}): Item {
     habit_id: null,
     due_date: "2026-07-22",
     due_time: "16:00",
+    duration_min: null,
     recurrence_rule: null,
     generated_from: null,
     postponed_count: 0,

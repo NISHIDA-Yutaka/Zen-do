@@ -81,6 +81,7 @@ export function makeOptimisticItem(
     habit_id: null,
     due_date: null,
     due_time: null,
+    duration_min: null,
     recurrence_rule: null,
     generated_from: null,
     postponed_count: 0,

@@ -39,6 +39,8 @@ export interface Item {
   habit_id: string | null;
   due_date: string | null;
   due_time: string | null;
+  // 所要時間（分）。カレンダーのブロック長（docs/calendar-plan.md）
+  duration_min: number | null;
   recurrence_rule: RecurrenceRule | null;
   generated_from: string | null;
   postponed_count: number;

@@ -69,6 +69,7 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       "parent_id",
       "due_date",
       "due_time",
+      "duration_min",
       "recurrence_rule",
       "sort_order",
     ] as const) {
