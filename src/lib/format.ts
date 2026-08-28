@@ -38,6 +38,14 @@ export function formatDueFull(
   return { text: `${m}月${d}日（${youbi}）${time}`, late: dueDate < today };
 }
 
+// 所要時間「30分」「1時間」「1時間30分」（docs/calendar-plan.md 5章）
+export function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}分`;
+  return m === 0 ? `${h}時間` : `${h}時間${m}分`;
+}
+
 export function formatReminderRule(rule: ReminderRule): string {
   switch (rule.kind) {
     case "at": {

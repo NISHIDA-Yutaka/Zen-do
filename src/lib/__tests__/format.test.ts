@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDueLabel } from "@/lib/format";
+import { formatDueLabel, formatDuration } from "@/lib/format";
 
 describe("formatDueLabel", () => {
   const today = "2026-07-30";
@@ -61,5 +61,22 @@ describe("formatDueLabel", () => {
       late: false,
       overdue: false,
     });
+  });
+});
+
+describe("formatDuration", () => {
+  it("1時間未満は分だけ", () => {
+    expect(formatDuration(15)).toBe("15分");
+    expect(formatDuration(45)).toBe("45分");
+  });
+
+  it("ちょうどの時間は分を出さない", () => {
+    expect(formatDuration(60)).toBe("1時間");
+    expect(formatDuration(180)).toBe("3時間");
+  });
+
+  it("端数のある時間", () => {
+    expect(formatDuration(90)).toBe("1時間30分");
+    expect(formatDuration(1439)).toBe("23時間59分");
   });
 });

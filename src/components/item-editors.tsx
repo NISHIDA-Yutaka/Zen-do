@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { isoWeekday } from "@/lib/date";
 import { getJson } from "@/lib/client";
 import type { Item, RecurrenceRule, Reminder, ReminderRule } from "@/lib/types";
-import { formatReminderRule } from "@/lib/format";
+import { formatDuration, formatReminderRule } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = [
@@ -88,6 +88,28 @@ export function Stepper({
 }
 
 // 繰り返しエディタ（docs/design.md 7.2）。期日なしでは設定不可
+// 所要時間はカレンダーのブロック長になる（docs/calendar-plan.md）。
+// 端数はリサイズで付くので、ここでは刻みのよい値だけを選ばせる
+const DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 180];
+
+export function DurationEditor({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (minutes: number | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {DURATION_PRESETS.map((m) => (
+        <SegButton key={m} on={value === m} onClick={() => onChange(value === m ? null : m)}>
+          {formatDuration(m)}
+        </SegButton>
+      ))}
+    </div>
+  );
+}
+
 export function RecurrenceEditor({
   rule,
   hasDue,

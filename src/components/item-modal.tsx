@@ -2,19 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DuePicker } from "@/components/due-picker";
-import { ProjectPicker, RecurrenceEditor, ReminderEditor } from "@/components/item-editors";
+import {
+  DurationEditor,
+  ProjectPicker,
+  RecurrenceEditor,
+  ReminderEditor,
+} from "@/components/item-editors";
 import { Markdown } from "@/components/markdown";
 import { PushNotice } from "@/components/push-notice";
 import { mutate as globalMutate } from "swr";
 import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists, TODAY_KEY } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { isFinePointer } from "@/lib/pointer";
-import { formatDueFull, formatRecurrenceRule } from "@/lib/format";
+import { formatDueFull, formatDuration, formatRecurrenceRule } from "@/lib/format";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Detail = { item: Item; reminders: Reminder[]; children: Item[]; parent: Item | null };
-type Expanded = "due" | "recur" | "project" | null;
+type Expanded = "due" | "duration" | "recur" | "project" | null;
 type StepDest = "child" | "today";
 type PatchResult = { item: Item; reminders: Reminder[] };
 
@@ -381,6 +386,37 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
 
               {!isProject && (
                 <>
+                  <FieldRow
+                    label="所要時間"
+                    onToggle={() => setExpanded((e) => (e === "duration" ? null : "duration"))}
+                    trailing={
+                      item.duration_min != null && (
+                        <button
+                          type="button"
+                          aria-label="所要時間をクリア"
+                          onClick={() => save({ duration_min: null })}
+                          className="text-nibi/60 hover:text-foreground hit-y text-sm"
+                        >
+                          ✕
+                        </button>
+                      )
+                    }
+                  >
+                    {item.duration_min != null ? (
+                      formatDuration(item.duration_min)
+                    ) : (
+                      <span className="text-nibi/70">なし</span>
+                    )}
+                  </FieldRow>
+                  {expanded === "duration" && (
+                    <span className="block pb-3">
+                      <DurationEditor
+                        value={item.duration_min}
+                        onChange={(m) => save({ duration_min: m })}
+                      />
+                    </span>
+                  )}
+
                   <FieldRow
                     label="繰り返し"
                     onToggle={() => setExpanded((e) => (e === "recur" ? null : "recur"))}
