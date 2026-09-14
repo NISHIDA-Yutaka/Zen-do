@@ -84,7 +84,14 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
         .eq("id", id)
         .select("*")
         .single();
-      if (error) throw new Error(error.message);
+      if (error) {
+        // 23505 = 習慣インスタンスの (habit_id, due_date) 一意制約。
+        // 繰り越した習慣を今日へ動かそうとして、今日の分が既にある時に起きる
+        if (error.code === "23505" && item.habit_id) {
+          return badRequest("その日の習慣は既にあります");
+        }
+        throw new Error(error.message);
+      }
       updated = data as Item;
     }
 

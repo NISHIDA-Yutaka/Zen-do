@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import useSWR from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
@@ -146,6 +146,46 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
+  // 繰り越し（期日が今日より前）をまとめて今日へ。1件ずつ直すのが手間なので一括で。
+  // 習慣は今日の分が既にあると一意制約で弾かれるため、成否を数えて残りを伝える
+  async function moveCarriedToToday(carried: Item[]) {
+    if (!data) return;
+    const ids = carried.map((t) => t.id).filter((id) => !id.startsWith("temp-"));
+    if (ids.length === 0) return;
+    setError(null);
+    for (const id of ids) setBusy(id, true);
+    try {
+      await mutate(
+        async () => {
+          const results = await Promise.allSettled(
+            ids.map((id) => patchJson(`/api/items/${id}`, { due_date: data.date })),
+          );
+          const failed = results.filter((r) => r.status === "rejected");
+          if (failed.length > 0) {
+            const reason = (failed[0] as PromiseRejectedResult).reason as Error;
+            setError(`${failed.length}件は今日へ移せませんでした（${reason.message}）`);
+          }
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            todos: data.todos.map((t) =>
+              ids.includes(t.id) ? { ...t, due_date: data.date } : t,
+            ),
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      for (const id of ids) setBusy(id, false);
+    }
+  }
+
   // 期限を外してInbox（未仕分け）へ送り、再スケジュールを促す。
   // 期日クリアに伴い繰り返しも外れる（DB制約 recurrence_requires_due_date）
   async function clearDue(item: Item) {
@@ -285,6 +325,10 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
 
   const { open: openMenu, menu } = useContextMenu();
 
+  // 期日が今日より前＝期限切れのまま日をまたいだもの。仕分け直しが要るので上にまとめる
+  const carried = data?.todos.filter((t) => t.due_date && t.due_date < data.date) ?? [];
+  const carriedBusy = carried.some((t) => busyIds.has(t.id));
+
   if (isLoading && !data) return <p className="text-nibi text-sm">読み込み中…</p>;
   if (!data) return <p className="text-beni text-sm">{loadError?.message ?? "読み込みに失敗しました"}</p>;
 
@@ -298,59 +342,78 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
       <ul {...listProps} aria-label="今日のタスク">
-        {data.todos.map((item) => (
-          <li
-            key={item.id}
-            onContextMenu={(e) => {
-              if (item.id.startsWith("temp-")) return;
-              openMenu(e, [
-                { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
-                { label: "Inboxへ", onSelect: () => clearDue(item) },
-                "separator",
-                { label: "削除", danger: true, onSelect: () => drop(item) },
-              ]);
-            }}
-            className={cn(
-              "border-keisen flex items-center gap-3 border-b py-3",
-              selectedId === item.id && "bg-kinari",
-            )}
-          >
+        {carried.length > 0 && (
+          <li className="flex items-center justify-between gap-2 pt-1 pb-1.5">
+            <h2 className="text-nibi text-xs font-semibold">繰り越し {carried.length}件</h2>
             <button
               type="button"
-              aria-label={`${item.title}を完了`}
-              disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-              onClick={() => complete(item)}
-              className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
-            />
-            <button
-              type="button"
-              onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
-              className="min-w-0 flex-1 text-left"
+              disabled={carriedBusy}
+              onClick={() => moveCarriedToToday(carried)}
+              className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
             >
-              <TaskMeta item={item} today={data.date} />
+              まとめて今日へ
             </button>
-            {item.due_date && item.due_date < data.date && (
-              <span className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-                  onClick={() => moveDue(item, data.date)}
-                  className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
-                >
-                  今日へ
-                </button>
-                <button
-                  type="button"
-                  aria-label="期限を外してInboxへ送る"
-                  disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-                  onClick={() => clearDue(item)}
-                  className="text-nibi hover:text-foreground hit-y shrink-0 text-[11px] disabled:opacity-40"
-                >
-                  Inboxへ
-                </button>
-              </span>
-            )}
           </li>
+        )}
+        {data.todos.map((item, i) => (
+          <Fragment key={item.id}>
+            {carried.length > 0 && i === carried.length && (
+              <li className="pt-4 pb-1.5">
+                <h2 className="text-nibi text-xs font-semibold">今日</h2>
+              </li>
+            )}
+            <li
+              onContextMenu={(e) => {
+                if (item.id.startsWith("temp-")) return;
+                openMenu(e, [
+                  { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
+                  { label: "Inboxへ", onSelect: () => clearDue(item) },
+                  "separator",
+                  { label: "削除", danger: true, onSelect: () => drop(item) },
+                ]);
+              }}
+              className={cn(
+                "border-keisen flex items-center gap-3 border-b py-3",
+                selectedId === item.id && "bg-kinari",
+              )}
+            >
+              <button
+                type="button"
+                aria-label={`${item.title}を完了`}
+                disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                onClick={() => complete(item)}
+                className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
+              />
+              <button
+                type="button"
+                onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <TaskMeta item={item} today={data.date} />
+              </button>
+              {item.due_date && item.due_date < data.date && (
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                    onClick={() => moveDue(item, data.date)}
+                    className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
+                  >
+                    今日へ
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="期限を外してInboxへ送る"
+                    disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                    onClick={() => clearDue(item)}
+                    className="text-nibi hover:text-foreground hit-y shrink-0 text-[11px] disabled:opacity-40"
+                  >
+                    Inboxへ
+                  </button>
+                </span>
+              )}
+            </li>
+          </Fragment>
         ))}
       </ul>
 
