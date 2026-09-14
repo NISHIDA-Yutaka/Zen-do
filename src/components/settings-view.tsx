@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { postJson } from "@/lib/client";
+import useSWR from "swr";
+import { getJson, postJson } from "@/lib/client";
 import { disablePush, enablePush, getPushState, type PushState } from "@/lib/push-client";
+import { cn } from "@/lib/utils";
 
 const STATE_LABEL: Record<PushState, string> = {
   unsupported: "このブラウザは通知に対応していません",
@@ -120,9 +122,103 @@ export function SettingsView() {
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
       {notice && <p className="text-nibi py-2 text-sm">{notice}</p>}
 
+      <LineSection />
+
       <p className="text-nibi/70 pt-6 text-xs">
         Google連携・AIの介入設定はまだありません。
       </p>
     </section>
+  );
+}
+
+type LineStatus = {
+  configured: boolean;
+  recipients: number;
+  used: number;
+  quota: number;
+  stopAt: number;
+};
+
+// LINE連携（docs/line-plan.md）。無料枠が月200通しかないので消費量を常に見えるようにする。
+function LineSection() {
+  const { data, error: loadError, mutate } = useSWR<LineStatus>("/api/line/status", getJson);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function sendTest() {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      const r = await postJson<{ sent: number }>("/api/line/test");
+      setNotice(`${r.sent}件送信しました`);
+      void mutate();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <h2 className="text-nibi border-keisen mt-6 border-b py-2 text-xs font-semibold">LINE</h2>
+
+      {loadError ? (
+        <p className="text-beni py-4 text-sm">{loadError.message}</p>
+      ) : !data ? (
+        <p className="text-nibi py-4 text-sm">読み込み中…</p>
+      ) : !data.configured ? (
+        <p className="text-nibi py-3 text-xs">
+          まだ設定されていません。LINE公式アカウントを作り、
+          <span className="font-semibold">LINE_CHANNEL_ACCESS_TOKEN</span> と
+          <span className="font-semibold">LINE_CHANNEL_SECRET</span> を登録すると使えます。
+        </p>
+      ) : (
+        <>
+          <div className="border-keisen flex items-center justify-between gap-3 border-b py-3">
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">送信先</span>
+              <span className="text-nibi mt-0.5 block text-[11px]">
+                {data.recipients > 0
+                  ? `${data.recipients}件`
+                  : "まだいません。LINEで公式アカウントを友だち追加してください"}
+              </span>
+            </span>
+            <button
+              type="button"
+              disabled={busy || data.recipients === 0}
+              onClick={sendTest}
+              className="border-wakuiro text-foreground/80 hover:bg-kinari hit-y shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+            >
+              テスト送信
+            </button>
+          </div>
+
+          <div className="border-keisen border-b py-3">
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-medium">今月の送信数</span>
+              <span
+                className={cn(
+                  "text-xs font-semibold",
+                  data.used >= data.stopAt ? "text-beni" : "text-nibi",
+                )}
+              >
+                {data.used} / {data.quota}
+              </span>
+            </span>
+            <span className="text-nibi mt-0.5 block text-[11px]">
+              {data.used >= data.stopAt
+                ? `上限に達したため送信を止めています（${data.stopAt}通で停止）`
+                : `無料枠は月${data.quota}通。${data.stopAt}通で自動的に止まります`}
+            </span>
+          </div>
+        </>
+      )}
+
+      {error && <p className="text-beni py-2 text-sm">{error}</p>}
+      {notice && <p className="text-nibi py-2 text-sm">{notice}</p>}
+    </>
   );
 }
