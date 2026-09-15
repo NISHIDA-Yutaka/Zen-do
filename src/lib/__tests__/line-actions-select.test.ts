@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { digestActions, type DigestInput } from "@/lib/line/messages";
+import { BUTTON_LIMIT, digestActions, type DigestInput } from "@/lib/line/messages";
 import type { Habit, Item } from "@/lib/types";
 
 const TODAY = "2026-09-15";
@@ -85,12 +85,10 @@ describe("digestActions", () => {
     );
   });
 
-  it("本文に名前を出す3件までと一致する（画面に無いものを操作させない）", () => {
-    const todos = ["A", "B", "C", "D", "E"].map((t) => task({ title: t }));
-    expect(digestActions(input({ slot: "night", todos })).tasks.map((t) => t.title)).toEqual([
-      "A",
-      "B",
-      "C",
-    ]);
+  it("ボタンは先頭から上限件数まで（Flexの10KB上限を超えないため）", () => {
+    const todos = ["A", "B", "C", "D", "E", "F", "G"].map((t) => task({ title: t }));
+    const { tasks } = digestActions(input({ slot: "night", todos }));
+    expect(tasks).toHaveLength(BUTTON_LIMIT);
+    expect(tasks.map((t) => t.title)).toEqual(["A", "B", "C", "D", "E"]);
   });
 });

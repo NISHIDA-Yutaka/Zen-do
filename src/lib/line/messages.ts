@@ -15,8 +15,14 @@ export type DigestInput = {
   inboxCount: number;
 };
 
-/** 名前を出す上限。これを超えたら「ほかn件」にまとめる */
-const NAME_LIMIT = 3;
+/** 習慣候補だけは名前を並べすぎないよう抑える（未完了タスクは全件出す） */
+const HABIT_NAME_LIMIT = 3;
+
+/**
+ * ボタンを付ける上限。本文は全件出すが、ボタンまで全件付けると
+ * Flexメッセージの10KB上限を超えて送信ごと弾かれるため、ここで頭打ちにする。
+ */
+export const BUTTON_LIMIT = 5;
 
 function hm(time: string): string {
   return time.slice(0, 5);
@@ -34,11 +40,9 @@ function bullet(item: Item): string {
   return item.due_time ? `・${hm(item.due_time)} ${item.title}` : `・${item.title}`;
 }
 
-/** 箇条書き。多すぎる時は件数にまとめて圧をかけない */
+/** 未完了は省略せず全部並べる（何が残っているか分からないと動けないため） */
 function listOf(items: Item[]): string[] {
-  const shown = items.slice(0, NAME_LIMIT).map(bullet);
-  if (items.length > NAME_LIMIT) shown.push(`・ほか${items.length - NAME_LIMIT}件`);
-  return shown;
+  return items.map(bullet);
 }
 
 function joinLines(lines: (string | null)[]): string {
@@ -50,7 +54,7 @@ function morning(input: DigestInput): string | null {
   if (todos.length === 0 && habitCandidates.length === 0) return null;
 
   const overdue = overdueOf(todos, input.today, input.nowHm);
-  const habits = habitCandidates.slice(0, NAME_LIMIT).map((h) => h.title);
+  const habits = habitCandidates.slice(0, HABIT_NAME_LIMIT).map((h) => h.title);
   return joinLines([
     "おはようございます。",
     todos.length > 0 ? `今日は${todos.length}件あります。` : "今日のタスクはありません。",
@@ -62,20 +66,18 @@ function morning(input: DigestInput): string | null {
 }
 
 function nudge(input: DigestInput): string | null {
-  const { todos, done } = input;
+  const { todos } = input;
   const overdue = overdueOf(todos, input.today, input.nowHm);
   // 過ぎたものも残りも無ければ、わざわざ声をかけない
   if (overdue.length === 0 && todos.length === 0) return null;
 
-  const praise = done.length > 0 ? `今日はもう${done.length}件片付いてますね。` : null;
   if (overdue.length === 0) {
-    return joinLines([praise, `残りは${todos.length}件です。無理のない範囲で。`]);
+    return joinLines([`残りは${todos.length}件です。無理のない範囲で。`]);
   }
   return joinLines([
-    praise,
     `時間を過ぎたものが${overdue.length}件あります。`,
     ...listOf(overdue),
-    "もう終わっていたらアプリで完了にしてください。あとに回しても大丈夫です。",
+    "もう終わっていたら下のボタンで完了にできます。あとに回しても大丈夫です。",
   ]);
 }
 
@@ -83,12 +85,11 @@ function night(input: DigestInput): string | null {
   const { todos, done, inboxCount } = input;
   if (todos.length === 0 && done.length === 0) return null;
 
-  const praise = done.length > 0 ? `お疲れさまでした。今日は${done.length}件完了です。` : "お疲れさまでした。";
   if (todos.length === 0) {
-    return joinLines([praise, "今日の分は全部片付きました。ゆっくり休んでください。"]);
+    return joinLines(["お疲れさまでした。", "今日の分は全部片付きました。ゆっくり休んでください。"]);
   }
   return joinLines([
-    praise,
+    "お疲れさまでした。",
     `残りは${todos.length}件です。`,
     ...listOf(todos),
     inboxCount >= 5 ? `Inboxに${inboxCount}件たまっています。手が空いた時に仕分けましょう。` : null,
@@ -113,25 +114,25 @@ export function buildDigest(input: DigestInput): string | null {
 export type GlobalAction = "alltmr" | "habits" | null;
 
 /**
- * 文面に添えるボタンの対象。
- * 本文に名前を出したものと一致させる（画面に無いものを操作させない）。
+ * 文面に添えるボタンの対象。本文に出したものの先頭からBUTTON_LIMIT件。
+ * 本文に無いタスクは対象にしない（見えていないものを操作させない）。
  */
 export function digestActions(input: DigestInput): { tasks: Item[]; global: GlobalAction } {
   switch (input.slot) {
     case "morning":
       return {
-        tasks: input.todos.slice(0, NAME_LIMIT),
+        tasks: input.todos.slice(0, BUTTON_LIMIT),
         global: input.habitCandidates.length > 0 ? "habits" : null,
       };
     case "noon":
     case "evening":
       return {
-        tasks: overdueOf(input.todos, input.today, input.nowHm).slice(0, NAME_LIMIT),
+        tasks: overdueOf(input.todos, input.today, input.nowHm).slice(0, BUTTON_LIMIT),
         global: null,
       };
     case "night":
       return {
-        tasks: input.todos.slice(0, NAME_LIMIT),
+        tasks: input.todos.slice(0, BUTTON_LIMIT),
         global: input.todos.length > 0 ? "alltmr" : null,
       };
   }

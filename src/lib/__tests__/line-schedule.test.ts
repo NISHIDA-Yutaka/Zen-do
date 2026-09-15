@@ -36,7 +36,7 @@ describe("slotsFor", () => {
 
 describe("dueSlots", () => {
   it("枠の時刻より前は送らない", () => {
-    expect(dueSlots("17:59", false)).toEqual([]);
+    expect(dueSlots("18:59", false)).toEqual([]);
     expect(dueSlots("08:59", true)).toEqual([]);
   });
 
@@ -46,12 +46,12 @@ describe("dueSlots", () => {
   });
 
   it("2時間以内の遅れなら送る（cronが数回落ちても届く）", () => {
-    expect(dueSlots("19:59", false)).toEqual(["evening"]);
-    expect(dueSlots("20:00", false)).toEqual(["evening"]);
+    expect(dueSlots("20:30", false)).toEqual(["evening"]);
+    expect(dueSlots("21:00", false)).toEqual(["evening"]);
   });
 
   it("2時間を超えて遅れたら送らない（朝の分が夜に届くのを防ぐ）", () => {
-    expect(dueSlots("20:01", false)).toEqual([]);
+    expect(dueSlots("21:01", false)).toEqual([]);
     expect(LATE_LIMIT_MIN).toBe(120);
   });
 

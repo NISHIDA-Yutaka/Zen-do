@@ -87,20 +87,21 @@ describe("buildDigest", () => {
     expect(text).toContain("ストレッチ");
   });
 
-  it("完了があれば先に触れる", () => {
-    const text = buildDigest(
-      input({ slot: "evening", todos: [task()], done: [task({ status: "done" })] }),
-    );
-    expect(text).toContain("もう1件片付いてますね");
+  it("完了した件数には触れない（残っているものだけ伝える）", () => {
+    const done = [task({ status: "done" }), task({ status: "done" })];
+    const evening = buildDigest(input({ slot: "evening", todos: [task()], done })) ?? "";
+    const night = buildDigest(input({ slot: "night", todos: [task()], done })) ?? "";
+    for (const text of [evening, night]) {
+      expect(text).not.toContain("2件完了");
+      expect(text).not.toContain("片付いてますね");
+    }
   });
 
-  it("3件までは名前を出し、それ以上はまとめる（件数で圧をかけない）", () => {
-    const todos = ["A", "B", "C", "D", "E"].map((t) => task({ title: t }));
-    const text = buildDigest(input({ slot: "night", todos })) ?? "";
-    expect(text).toContain("・A");
-    expect(text).toContain("・C");
-    expect(text).not.toContain("・D");
-    expect(text).toContain("ほか2件");
+  it("未完了は省略せず全部並べる（何が残っているか分からないと動けない）", () => {
+    const titles = ["A", "B", "C", "D", "E"];
+    const text = buildDigest(input({ slot: "night", todos: titles.map((t) => task({ title: t })) })) ?? "";
+    for (const t of titles) expect(text).toContain(`・${t}`);
+    expect(text).not.toContain("ほか");
   });
 
   it("催促は超過があれば名前を出し、なければ件数だけにとどめる", () => {

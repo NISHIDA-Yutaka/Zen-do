@@ -9,7 +9,7 @@ export type Slot = "morning" | "noon" | "evening" | "night";
 export const SLOT_TIME: Record<Slot, string> = {
   morning: "09:00",
   noon: "13:00",
-  evening: "18:00",
+  evening: "19:00",
   night: "23:00",
 };
 
