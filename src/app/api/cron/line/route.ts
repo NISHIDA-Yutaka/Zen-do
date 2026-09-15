@@ -6,7 +6,8 @@ import { handle, json } from "@/lib/api";
 import { nowHmInJst, todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { getLineConfig } from "@/lib/line/config";
-import { buildDigest } from "@/lib/line/messages";
+import { buildDigestMessage } from "@/lib/line/flex";
+import { buildDigest, digestActions } from "@/lib/line/messages";
 import { pushToAll } from "@/lib/line/push";
 import { ALL_SLOTS, dueSlots, isRestDay } from "@/lib/line/schedule";
 import { loadTodayData } from "@/lib/today-data";
@@ -51,9 +52,14 @@ export function GET(req: NextRequest): Promise<Response> {
 
     const [data, inbox] = await Promise.all([loadTodayData(now), inboxCount()]);
 
-    const results: { slot: string; result: string; text?: string | null }[] = [];
+    const results: {
+      slot: string;
+      result: string;
+      text?: string | null;
+      message?: unknown;
+    }[] = [];
     for (const slot of slots) {
-      const text = buildDigest({
+      const digestInput = {
         slot,
         today,
         nowHm,
@@ -61,9 +67,16 @@ export function GET(req: NextRequest): Promise<Response> {
         done: data.done,
         habitCandidates: data.habitCandidates,
         inboxCount: inbox,
-      });
+      };
+      const text = buildDigest(digestInput);
       if (preview) {
-        results.push({ slot, result: text ? "would_send" : "nothing_to_say", text });
+        const { tasks, global } = digestActions(digestInput);
+        results.push({
+          slot,
+          result: text ? "would_send" : "nothing_to_say",
+          text,
+          message: text ? buildDigestMessage(text, tasks, global) : null,
+        });
         continue;
       }
       // 言うことが無い枠は送らない（無料枠を空振りで消費しない）
@@ -74,7 +87,8 @@ export function GET(req: NextRequest): Promise<Response> {
       // 1枠の失敗（枠切れ・LINE側の障害）で全体を500にしない。
       // cronサービスのログに理由が残るよう、結果として返す
       try {
-        const push = await pushToAll([{ type: "text", text }], "digest", slot);
+        const { tasks, global } = digestActions(digestInput);
+        const push = await pushToAll([buildDigestMessage(text, tasks, global)], "digest", slot);
         results.push({ slot, result: push.skipped ?? `sent:${push.sent}` });
       } catch (err) {
         console.error(`[line] ${slot}の配信に失敗:`, err);

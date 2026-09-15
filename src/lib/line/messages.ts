@@ -108,3 +108,31 @@ export function buildDigest(input: DigestInput): string | null {
       return night(input);
   }
 }
+
+/** その枠で全体に効くボタン（1つだけ） */
+export type GlobalAction = "alltmr" | "habits" | null;
+
+/**
+ * 文面に添えるボタンの対象。
+ * 本文に名前を出したものと一致させる（画面に無いものを操作させない）。
+ */
+export function digestActions(input: DigestInput): { tasks: Item[]; global: GlobalAction } {
+  switch (input.slot) {
+    case "morning":
+      return {
+        tasks: input.todos.slice(0, NAME_LIMIT),
+        global: input.habitCandidates.length > 0 ? "habits" : null,
+      };
+    case "noon":
+    case "evening":
+      return {
+        tasks: overdueOf(input.todos, input.today, input.nowHm).slice(0, NAME_LIMIT),
+        global: null,
+      };
+    case "night":
+      return {
+        tasks: input.todos.slice(0, NAME_LIMIT),
+        global: input.todos.length > 0 ? "alltmr" : null,
+      };
+  }
+}

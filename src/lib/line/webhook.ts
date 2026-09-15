@@ -2,10 +2,14 @@
 // 応答は必ず reply（無料）で返す。push（課金対象）はここでは使わない。
 import "server-only";
 import type { webhook } from "@line/bot-sdk";
+import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
+import { runAction } from "@/lib/line/actions";
+import { parseAction } from "@/lib/line/postback";
 import { lineClient } from "@/lib/line/client";
 import type { LineConfig } from "@/lib/line/config";
 import { addRecipient, removeRecipient } from "@/lib/line/recipients";
+import { captureFromText } from "@/lib/line/capture";
 
 /**
  * このイベントを処理してよいか。
@@ -54,8 +58,18 @@ async function handleFollow(config: LineConfig, event: webhook.FollowEvent): Pro
 async function handleMessage(config: LineConfig, event: webhook.MessageEvent): Promise<void> {
   // 返信できない種類のイベント（replyTokenなし）は黙って捨てる
   if (event.message.type !== "text" || !event.replyToken) return;
-  // フェーズ3でSmart Inputに繋いでタスク登録にする。今は疎通確認の返事だけ
-  await reply(config, event.replyToken, "受け取りました。ここからタスクを登録できるようにするのは次の段階です。");
+  const result = await captureFromText(event.message.text, todayInJst());
+  await reply(config, event.replyToken, result);
+}
+
+async function handlePostback(config: LineConfig, event: webhook.PostbackEvent): Promise<void> {
+  if (!event.replyToken) return;
+  const action = parseAction(event.postback.data);
+  if (!action) {
+    await reply(config, event.replyToken, "その操作は分かりませんでした。");
+    return;
+  }
+  await reply(config, event.replyToken, await runAction(action));
 }
 
 export async function handleLineEvent(config: LineConfig, event: webhook.Event): Promise<void> {
@@ -74,8 +88,10 @@ export async function handleLineEvent(config: LineConfig, event: webhook.Event):
     case "message":
       await handleMessage(config, event as webhook.MessageEvent);
       break;
+    case "postback":
+      await handlePostback(config, event as webhook.PostbackEvent);
+      break;
     default:
-      // postback はフェーズ3で扱う
       break;
   }
 }
