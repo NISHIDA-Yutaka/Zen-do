@@ -1,6 +1,7 @@
 // Item / Reminder のデータ層ヘルパー（server-only）。API Routes から使う。
 import "server-only";
 import { db } from "@/lib/db";
+import { shouldCountPostpone } from "@/lib/postpone";
 import { isRelativeReminderRule, resolveRemindAt } from "@/lib/reminders";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
 
@@ -88,6 +89,21 @@ export async function recalcRelativeReminders(item: Item): Promise<void> {
  * （二重完了リクエストや途中失敗の再試行では 23505 で弾かれ、既存を採用する）。
  * dropped の子は引き継がない。recurrence_rule / habit_id は子に複製しない（入れ子の繰り返し・習慣化を避ける）。
  */
+/**
+ * 期日を付け替える。後ろに動いた時だけ先送りとして数える（docs/line-plan.md 9.0）。
+ * PATCH /api/items/[id] を通らない経路（LINEのボタン等）から使う。
+ */
+export async function moveDueDate(item: Item, date: string): Promise<Item> {
+  const patch: { due_date: string; postponed_count?: number } = { due_date: date };
+  if (shouldCountPostpone(item.due_date, date)) patch.postponed_count = item.postponed_count + 1;
+
+  const { data, error } = await db.from("items").update(patch).eq("id", item.id).select("*").single();
+  if (error) throw new Error(error.message);
+  const updated = data as Item;
+  await recalcRelativeReminders(updated);
+  return updated;
+}
+
 export async function copyDescendantsForRecurrence(
   sourceParentId: string,
   newParentId: string,

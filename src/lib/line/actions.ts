@@ -3,24 +3,11 @@
 import "server-only";
 import { completeItem } from "@/lib/complete";
 import { addDays, todayInJst } from "@/lib/date";
-import { db } from "@/lib/db";
 import { instantiateHabit } from "@/lib/habit-instance";
-import { getItem, recalcRelativeReminders } from "@/lib/items";
+import { getItem, moveDueDate } from "@/lib/items";
 import type { LineAction } from "@/lib/line/postback";
 import { loadTodayData } from "@/lib/today-data";
-import type { Habit, Item } from "@/lib/types";
-
-/** 期日を付け替える（Today画面の「明日へ」と同じ扱い。相対リマインダーも追従させる） */
-async function moveDue(item: Item, date: string): Promise<void> {
-  const { data, error } = await db
-    .from("items")
-    .update({ due_date: date })
-    .eq("id", item.id)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  await recalcRelativeReminders(data as Item);
-}
+import type { Habit } from "@/lib/types";
 
 async function runDone(id: string): Promise<string> {
   const item = await getItem(id);
@@ -37,7 +24,7 @@ async function runTomorrow(id: string): Promise<string> {
   if (!item) return "そのタスクは見つかりませんでした。";
   if (item.status !== "todo") return `「${item.title}」は未完了ではありません。`;
   const tomorrow = addDays(todayInJst(), 1);
-  await moveDue(item, tomorrow);
+  await moveDueDate(item, tomorrow);
   return `「${item.title}」を明日に回しました。`;
 }
 
@@ -48,7 +35,7 @@ async function runAllTomorrow(): Promise<string> {
   // 習慣は日ごとに作られるもので、明日の分は明日また出る。動かすと一意制約にも当たる
   const movable = todos.filter((t) => !t.habit_id);
   const skipped = todos.length - movable.length;
-  for (const t of movable) await moveDue(t, tomorrow);
+  for (const t of movable) await moveDueDate(t, tomorrow);
   const head = `${movable.length}件を明日に回しました。ゆっくり休んでください。`;
   return skipped > 0 ? `${head}\n（習慣${skipped}件はそのままにしています）` : head;
 }

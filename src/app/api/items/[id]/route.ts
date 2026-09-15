@@ -12,6 +12,7 @@ import {
   insertReminders,
   recalcRelativeReminders,
 } from "@/lib/items";
+import { shouldCountPostpone } from "@/lib/postpone";
 import { autoDueTimeReminders } from "@/lib/reminders";
 import type { Item } from "@/lib/types";
 import { updateItemSchema } from "@/lib/validation";
@@ -74,6 +75,12 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       "sort_order",
     ] as const) {
       if (body[key] !== undefined) update[key] = body[key];
+    }
+
+    // 期日が後ろに動いたら先送りとして数える（docs/line-plan.md 9.0）。
+    // Today画面の「明日へ」・カレンダーのドラッグ・繰り越しの一括移動は全部ここを通る
+    if (body.due_date !== undefined && shouldCountPostpone(item.due_date, body.due_date)) {
+      update.postponed_count = item.postponed_count + 1;
     }
 
     let updated = item;
