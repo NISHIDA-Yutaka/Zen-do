@@ -97,10 +97,7 @@ line_events     (event_id text pk, received_at)  -- webhook 再送の重複排�
 1. **土台**: LINE公式アカウント作成（**ユーザー自身の操作**: LINE Developers でプロバイダー→Messaging API チャネル→長期トークン発行、Webhook URL 設定、応答メッセージ OFF）。`@line/bot-sdk` 導入、migration、webhook（署名検証・follow/unfollow・イベント重複排除）、Settings に「LINE」節（連携状態・テスト送信・当月送信数）
 2. **定時配信**: `line-schedule.ts`（平日/休日・枠）、`line-messages.ts`（励ましテンプレ）、`/api/cron/line`、`line_push_log` による冪等化、190通の安全弁。cron-job.org 登録はユーザー操作
 3. **ボタン操作＋テキスト捕捉**: postback（完了・明日へ・習慣追加・全部明日へ）、text→`parseSmartInput`→登録→reply
-4. **自然言語**（方針を2026-09-15に変更・未設計）: 当初は「文面をGeminiに生成させる」想定だったが、**テンプレ配信はそのまま残し、配信した内容を文脈に持ったままGeminiと対話できるルート**を作る方向に変更。配信を置き換えるのではなく、配信の後ろに会話を足す。
-   - 未解決: いまは「テキスト＝タスク登録」に全部倒しているので、質問と登録をどう振り分けるか
-   - Gemini の function calling に **MCP と同じ操作群**（`src/lib/mcp/server.ts` の14ツールの内部関数）を渡す案は有効
-   - **分からない発言はタスク登録に倒さず聞き返す**（誤登録が一番困る）
+4. **自然言語**: Gemini の function calling に **MCP と同じ操作群**（`src/lib/mcp/server.ts` の14ツールの内部関数）を渡し、テキストの意図を操作に写す。「今日の残りは？」「歯医者は来週に」「Duolingo終わった」を扱えれば十分。応答は励まし系のシステムプロンプトで統一。**分からない発言はタスク登録に倒さず聞き返す**（誤登録が一番困る）
 5. 完了後: design.md 21章、spec.md 実装状況更新（ユーザー確認の上で）
 
 ## 7. 将来（スコープ外）
