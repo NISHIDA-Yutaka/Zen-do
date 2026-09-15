@@ -113,3 +113,129 @@ line_events     (event_id text pk, received_at)  -- webhook 再送の重複排�
 - push の送信数は**必ず `line_push_log` に通してから**送る（数え漏れ＝枠切れ）
 - テストは提案の上で承認を得る（CLAUDE.md）。純関数化する対象: スケジュール判定（平日/休日・枠・2時間ルール）、文面生成、postback の data 解析
 - コミットはフェーズ単位で、ユーザー確認の上で
+
+## 9. ADHD向けの声掛け（設計確定 2026-09-15・未実装）
+
+spec.md 1.2 の特性（計画の困難さ・忘却）に対して、**既に持っているデータ**で打つ手。push は増やさない（既存の便に載せるか、返信で完結させる）。
+Gemini を呼ぶのは 9.4 の「最初の一歩」だけ。9.1・9.2 はルールだけで動く。
+着手順は **9.0 → 9.1 → 9.2 → 9.4**。9.0 を入れてから2〜3日で `postponed_count` が溜まり始めるので、その間に 9.1 を出す。
+
+「次はこれ1つ」「残り時間と見積もりの突き合わせ」は `duration_min` の入力が溜まってから（現状0件のため保留）。
+
+### 9.0 前提: 先送りを数える（必須・数行）
+
+**現状の問題**: `items.postponed_count` は全286件が0。増やす経路 `/api/items/[id]/postpone` を誰も呼んでおらず、Today画面の「明日へ」・LINEの「明日へ」・「まとめて今日へ」・カレンダーのドラッグは全部ただの `due_date` 更新で通っている。
+
+**ルール**: `PATCH /api/items/[id]` で `due_date` が**元より後ろに動いたら `postponed_count` を +1**。前に動かすのは数えない。1か所で全経路を拾える。
+- 「繰り越し→今日へ」も数える（期日を過ぎて日をまたいだ時点で1回滑っている）
+- 完了時の次回生成で0に戻るのは実装済み（complete.ts）
+- 過去分は取り戻せない。数字を埋めない。眼科・旧スマホのような常連は毎日「まとめて今日へ」を通るので2〜3日で閾値に達する
+- 判定 `shouldCountPostpone(oldDue, newDue)` は純関数にしてテストする
+
+### 9.1 おやすみ中の習慣（Gemini不要）
+
+| | |
+|---|---|
+| 判定 | `computeHabitStats(...)` の `resting === true`（昨日・今日とも未実施で救済中）。非pause習慣が対象 |
+| データ | `loadTodayData` に `restingHabits: Habit[]` を足す。インスタンスは既に読んでいるので追加クエリなし |
+| 載せる便 | 夕と深夜。習慣1件につき1行。通常の一覧の後ろに置く |
+| 文面 | 「Duolingo、昨日お休みでした。今日やれば途切れません。」 |
+| ボタン | 夕: **[今日に追加]**（`instantiateHabit`）／深夜: **[やった]**（生成して完了まで。23時に「追加」だけでは意味がない） |
+
+postback: `a=hab_add&id=<habitId>` / `a=hab_done&id=<habitId>`。`hab_done` は今日分が既に done なら「もう完了しています」と返す。
+
+### 9.2 引っかかっているタスク（ボタンまではGemini不要）
+
+**選定**: `status='todo'` かつ `habit_id is null` かつ `postponed_count >= 2`。`postponed_count` 降順で **1通あたり最大2件**（Flex容量のため。残りは翌日に持ち越し）。
+**置き場所**: 夕と深夜の便で、通常の一覧より**前**に別ブロックで出す。ここに出したタスクは通常の一覧から**除く**（全件表示は保つ。並べ替えただけ）。
+**回数は文面に出さない**。内部判定にだけ使う。
+
+```
+「もりした眼科に予約する」は何度か動いています。
+何が引っかかっていますか？
+[完了]  [大きすぎる]  [気が乗らない]  [もう要らない]
+```
+
+| ボタン | postback | 処理 | 返信 |
+|---|---|---|---|
+| 完了 | `a=done&id` | 既存 | 既存 |
+| 大きすぎる | `a=big&id` | 既存 `breakdownTask` → **子ToDoとして作成**（`parent_id`=元タスク） | 作った手順を列挙 |
+| 気が乗らない | `a=stuck&id` | 9.4 | 一歩を提案＋[やる][別の案] |
+| もう要らない | `a=drop&id` | `status='dropped'` | 「破棄しました。戻すならアプリから」 |
+
+**答えたら `postponed_count` を0に戻す**（大きすぎる・気が乗らない・要らない のいずれでも）。戻さないと翌日また同じ質問が来る。「介入したのでここから数え直す」という意味。
+
+**Flex容量**: 質問ブロックは1件4ボタン。質問ブロックがある便では通常の一覧の `BUTTON_LIMIT` を **3** に下げる（最悪 4×2＋3×2＋全体1＝15ボタンで8KB前後）。実装後に LINE の `validate/push` で必ず確認する。
+
+### 9.3 データ: `line_suggestions`
+
+「別の案」を押すたびにゴミタスクが残らないよう、**[やる]を押すまでタスクを作らない**。提案は postback data（300文字）に載らないのでテーブルに置く。
+
+```
+line_suggestions (
+  item_id uuid primary key references items(id) on delete cascade,
+  step text not null,
+  minutes integer not null,
+  created_at timestamptz not null default now()
+)
+```
+RLS有効。1タスク1件（上書き）。
+
+### 9.4 最初の一歩（Geminiを使う唯一の箇所）
+
+```
+[気が乗らない] a=stuck&id → firstStep(ctx) → line_suggestions に保存
+                           → 返信「最初の一歩: 〜（3分）」[やる][別の案]
+[やる]        a=go&id     → 保存した一歩で Today にタスク作成（parent_id=元, due_date=今日）→ 返信
+[別の案]      a=alt&id    → firstStep(ctx, avoid=[保存済みの案]) → 上書き保存 → 返信
+```
+
+- `src/lib/gemini.ts` に `firstStep(ctx: BreakdownContext, avoid: string[] = [])` を足す。呼び方は既存の `breakdownTask` と同じ（REST直叩き・flash・`responseSchema` でJSON固定）
+- 出力スキーマ: `{ "step": string, "minutes": number }`。`temperature: 0.6`（「別の案」でちゃんと変わるように。分解の0.4より高め）
+- Gemini が失敗したら「今は出せませんでした」と返して終わる。タスクは触らない。`postponed_count` も戻さない（質問は翌日また出る）
+- webhook ルートに `export const maxDuration = 30;` を付ける（`after()` 内で Gemini を待つため。Route Segment Config の書き方は `node_modules/next/dist/docs/` で確認すること）
+
+**プロンプト**（これが新規に書く唯一のプロンプト。[大きすぎる] は既存の分解プロンプトをそのまま使う）:
+
+```
+あなたはADHDのユーザーのタスク管理を助けるアシスタントです。
+次のタスクは何度も先送りされていて、本人は「気が乗らない」と答えました。
+タスクを終わらせる必要はありません。「最初の一歩」を1つだけ出してください。
+
+条件:
+- 物理的な動作1つだけ（例:「電話番号を調べて連絡先に入れる」「箱を机に出す」）
+- 5分以内で終わる。長いなら、もっと小さくする
+- いま手元（自宅かスマホ）で、誰にも連絡せずに始められること
+- 「決める」「考える」「計画する」で始めない。手が動く動詞で始める
+- タスク全体の言い換えは禁止。全体の1/10以下の大きさにする
+- メモに書かれた事情（特に「何が面倒か」）があれば、そこを避ける一歩にする
+- ユーザーと同じ言語で書く
+
+# 文脈
+タスク: {title}
+メモ: {notes または（なし）}
+所属プロジェクト: {projectTitle}（あれば。プロジェクトのメモも）
+タグ: {tags}
+避ける案: {avoid を列挙}（「別の案」の時だけ付ける）
+```
+
+「メモに書かれた事情」の行は、MCP の `update_notes` で書いたヒアリング内容がそのまま一歩の質に効くようにするためのもの。
+
+### 9.5 変更するファイル（目安）
+
+| ファイル | 変更 |
+|---|---|
+| `src/app/api/items/[id]/route.ts` | 9.0 の +1 |
+| `src/lib/today-data.ts` | `restingHabits` |
+| `src/lib/line/messages.ts` | おやすみ中ブロック・質問ブロック・`digestActions` 拡張・`BUTTON_LIMIT` の切替 |
+| `src/lib/line/flex.ts` | 2種類のブロック描画 |
+| `src/lib/line/postback.ts` | `hab_add` `hab_done` `big` `stuck` `drop` `go` `alt` |
+| `src/lib/line/actions.ts` | 各ハンドラ |
+| `src/lib/gemini.ts` | `firstStep` |
+| `src/app/api/line/webhook/route.ts` | `maxDuration` |
+| `supabase/migrations/` | `line_suggestions` |
+
+### 9.6 テスト（提案。承認を得てから）
+
+純関数の対象: `shouldCountPostpone`（後ろ＝+1／前・同日・null→日付＝数えない）、引っかかりタスクの選定（閾値・上限2件・習慣除外・降順）、おやすみ中ブロックの文面（枠で「今日に追加」「やった」が切り替わる）、postback の新しい種類の往復。
+Gemini 呼び出し自体はテストしない（外部API）。実機確認は「気が乗らない」→提案→「別の案」→違う案→「やる」→Todayに1件、の順。
