@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildDigest, type DigestInput, overdueOf } from "@/lib/line/messages";
+import type { HabitAlert } from "@/lib/habit-alerts";
+import { buildDigest, type DigestInput, habitAlertLines, overdueOf } from "@/lib/line/messages";
 import type { Habit, Item } from "@/lib/types";
 
 const TODAY = "2026-09-14";
@@ -45,6 +46,18 @@ function habit(title: string): Habit {
   };
 }
 
+function alert(over: Partial<HabitAlert> & { rule?: Habit["frequency_rule"] } = {}): HabitAlert {
+  const { rule, ...rest } = over;
+  return {
+    habit: { ...habit("Study Korean"), frequency_rule: rule ?? { type: "times_per_week", n: 2 } },
+    remaining: 2,
+    daysLeft: 3,
+    tight: true,
+    breaksStreak: false,
+    ...rest,
+  };
+}
+
 function input(over: Partial<DigestInput>): DigestInput {
   return {
     slot: "night",
@@ -53,6 +66,7 @@ function input(over: Partial<DigestInput>): DigestInput {
     todos: [],
     done: [],
     habitCandidates: [],
+    habitAlerts: [],
     inboxCount: 0,
     ...over,
   };
@@ -134,5 +148,45 @@ describe("buildDigest", () => {
       expect(text).not.toContain(ng);
     }
     expect(text).toContain("大丈夫");
+  });
+});
+
+describe("habitAlertLines", () => {
+  it("残り回数と残り日数を出す", () => {
+    expect(habitAlertLines([alert()])[0]).toBe(
+      "Study Korean、今週あと2回。残り3日です。余裕は1日だけです。",
+    );
+  });
+
+  it("残り全部の日でやれば届く時はそう言う", () => {
+    expect(habitAlertLines([alert({ daysLeft: 2 })])[0]).toContain("残り全部の日でやれば届きます");
+  });
+
+  it("救済を使い切っている時だけ「切れます」と書く（週n回は1週落としても即切れではない）", () => {
+    expect(habitAlertLines([alert()])[0]).not.toContain("切れます");
+    expect(habitAlertLines([alert({ breaksStreak: true })])[0]).toContain("ここで落とすと連続が切れます");
+  });
+
+  it("もう届かない時は畳みかけず、次に繋がる行動を示す", () => {
+    const line = habitAlertLines([alert({ daysLeft: 1, breaksStreak: true })])[0];
+    expect(line).toContain("1回でもやれば次に繋がります");
+    expect(line).not.toContain("切れます");
+  });
+
+  it("月n回は「今月」と書く", () => {
+    const line = habitAlertLines([alert({ rule: { type: "times_per_month", n: 2 } })])[0];
+    expect(line).toContain("今月あと2回");
+  });
+
+  it("日課は回数ではなく「今日やれば途切れません」と伝える", () => {
+    const line = habitAlertLines([
+      alert({ rule: { type: "daily" }, remaining: 1, daysLeft: 1, breaksStreak: true }),
+    ])[0];
+    expect(line).toBe("Study Korean、今日やれば途切れません。");
+  });
+
+  it("習慣の催促があれば、残タスクが無い枠でも送る", () => {
+    const text = buildDigest(input({ slot: "evening", habitAlerts: [alert()] }));
+    expect(text).toContain("Study Korean");
   });
 });

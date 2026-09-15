@@ -7,6 +7,8 @@ describe("encodeAction / parseAction", () => {
   const cases: LineAction[] = [
     { kind: "done", id: ID },
     { kind: "tmr", id: ID },
+    { kind: "hab_add", id: ID },
+    { kind: "hab_done", id: ID },
     { kind: "alltmr" },
     { kind: "habits" },
   ];
@@ -37,6 +39,8 @@ describe("parseAction が受け付けないもの", () => {
   it("対象idの無い個別操作（誤爆を防ぐ）", () => {
     expect(parseAction("a=done")).toBeNull();
     expect(parseAction("a=tmr&id=")).toBeNull();
+    expect(parseAction("a=hab_add")).toBeNull();
+    expect(parseAction("a=hab_done&id=")).toBeNull();
   });
 
   it("空文字やゴミ", () => {

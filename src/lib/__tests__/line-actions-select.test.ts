@@ -53,10 +53,32 @@ function input(over: Partial<DigestInput>): DigestInput {
     todos: [],
     done: [],
     habitCandidates: [],
+    habitAlerts: [],
     inboxCount: 0,
     ...over,
   };
 }
+
+describe("digestActions: 習慣ボタン", () => {
+  const habitAlerts = [
+    { habit: habit(), remaining: 2, daysLeft: 3, tight: true, breaksStreak: false },
+  ];
+
+  it("深夜は「やった」まで済ませる（23時に追加だけでは意味がない）", () => {
+    const { habits } = digestActions(input({ slot: "night", habitAlerts }));
+    expect(habits).toEqual([{ habit: habitAlerts[0].habit, action: "hab_done" }]);
+  });
+
+  it("朝・昼・夕は「今日に追加」", () => {
+    for (const slot of ["morning", "noon", "evening"] as const) {
+      expect(digestActions(input({ slot, habitAlerts })).habits[0].action).toBe("hab_add");
+    }
+  });
+
+  it("催促する習慣が無ければボタンも出さない", () => {
+    expect(digestActions(input({ slot: "night" })).habits).toEqual([]);
+  });
+});
 
 describe("digestActions", () => {
   it("催促は時間を過ぎたものだけを操作対象にする", () => {

@@ -4,7 +4,7 @@ import "server-only";
 import type { messagingApi } from "@line/bot-sdk";
 import { encodeAction } from "@/lib/line/postback";
 import type { GlobalAction } from "@/lib/line/messages";
-import type { Item } from "@/lib/types";
+import type { Habit, Item } from "@/lib/types";
 
 const GLOBAL_LABEL: Record<Exclude<GlobalAction, null>, string> = {
   alltmr: "残りを全部明日へ",
@@ -42,6 +42,29 @@ function taskBlock(item: Item) {
   };
 }
 
+export type HabitButton = { habit: Habit; action: "hab_add" | "hab_done" };
+
+const HABIT_LABEL: Record<HabitButton["action"], string> = {
+  hab_add: "今日に追加",
+  hab_done: "やった",
+};
+
+function habitBlock({ habit, action }: HabitButton) {
+  return {
+    type: "box" as const,
+    layout: "horizontal" as const,
+    spacing: "sm" as const,
+    margin: "md" as const,
+    contents: [
+      { type: "text" as const, text: habit.title, size: "sm" as const, wrap: true, flex: 3, gravity: "center" as const },
+      {
+        ...smallButton(HABIT_LABEL[action], encodeAction({ kind: action, id: habit.id }), `${HABIT_LABEL[action]}: ${habit.title}`),
+        flex: 2,
+      },
+    ],
+  };
+}
+
 /**
  * 文面＋ボタン。操作対象が無ければただのテキストで送る
  * （Flexは通知欄に altText しか出ないので、飾りだけのために使わない）。
@@ -50,8 +73,9 @@ export function buildDigestMessage(
   text: string,
   tasks: Item[],
   global: GlobalAction,
+  habits: HabitButton[] = [],
 ): messagingApi.Message {
-  if (tasks.length === 0 && global === null) return { type: "text", text };
+  if (tasks.length === 0 && global === null && habits.length === 0) return { type: "text", text };
 
   // altText（通知欄・引用に出る文字列）はLINE側の上限が400文字。
   // 超えると送信ごと弾かれてしまうので、ここで必ず収める
@@ -77,6 +101,7 @@ export function buildDigestMessage(
         contents: [
           { type: "text", text, size: "sm", wrap: true },
           ...tasks.map(taskBlock),
+          ...habits.map(habitBlock),
         ],
       },
       ...(footer ? { footer } : {}),

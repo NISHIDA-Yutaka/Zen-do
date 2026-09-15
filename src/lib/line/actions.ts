@@ -2,6 +2,7 @@
 // 応答は reply（無料）なので、ここでの操作は無料枠を消費しない。
 import "server-only";
 import { completeItem } from "@/lib/complete";
+import { db } from "@/lib/db";
 import { addDays, todayInJst } from "@/lib/date";
 import { instantiateHabit } from "@/lib/habit-instance";
 import { getItem, moveDueDate } from "@/lib/items";
@@ -53,6 +54,33 @@ async function runHabits(): Promise<string> {
   return `習慣を${added.length}件追加しました（${added.map((h) => h.title).join("、")}）。`;
 }
 
+async function getHabit(id: string): Promise<Habit | null> {
+  const { data, error } = await db.from("habits").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as Habit) ?? null;
+}
+
+/** 今日の分を作る（既にあればそれを使う） */
+async function runHabitAdd(habitId: string): Promise<string> {
+  const habit = await getHabit(habitId);
+  if (!habit) return "その習慣は見つかりませんでした。";
+  const { item, created } = await instantiateHabit(habit, todayInJst());
+  if (item.status === "done") return `「${habit.title}」は今日もう終わっています。`;
+  return created
+    ? `「${habit.title}」を今日に追加しました。`
+    : `「${habit.title}」は今日の分がもうあります。`;
+}
+
+/** 深夜用。今日の分を作って完了まで済ませる（23時に「追加」だけでは意味がない） */
+async function runHabitDone(habitId: string): Promise<string> {
+  const habit = await getHabit(habitId);
+  if (!habit) return "その習慣は見つかりませんでした。";
+  const { item } = await instantiateHabit(habit, todayInJst());
+  if (item.status === "done") return `「${habit.title}」はもう完了しています。`;
+  await completeItem(item);
+  return `「${habit.title}」を完了しました。よく続いています。`;
+}
+
 /** ボタンを押された時の処理。返り値がそのまま返信の文面になる */
 export function runAction(action: LineAction): Promise<string> {
   switch (action.kind) {
@@ -60,6 +88,10 @@ export function runAction(action: LineAction): Promise<string> {
       return runDone(action.id);
     case "tmr":
       return runTomorrow(action.id);
+    case "hab_add":
+      return runHabitAdd(action.id);
+    case "hab_done":
+      return runHabitDone(action.id);
     case "alltmr":
       return runAllTomorrow();
     case "habits":

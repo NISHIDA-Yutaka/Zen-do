@@ -5,6 +5,8 @@
 export type LineAction =
   | { kind: "done"; id: string }
   | { kind: "tmr"; id: string }
+  | { kind: "hab_add"; id: string }
+  | { kind: "hab_done"; id: string }
   | { kind: "alltmr" }
   | { kind: "habits" };
 
@@ -20,6 +22,7 @@ export function parseAction(data: string): LineAction | null {
   const kind = params.get("a");
   const id = params.get("id");
   if (kind === "alltmr" || kind === "habits") return { kind };
-  if ((kind === "done" || kind === "tmr") && id) return { kind, id };
+  if ((kind === "done" || kind === "tmr" || kind === "hab_add" || kind === "hab_done") && id)
+    return { kind, id };
   return null;
 }

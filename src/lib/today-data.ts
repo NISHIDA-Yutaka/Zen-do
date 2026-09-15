@@ -4,6 +4,7 @@ import "server-only";
 import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { isPlannerCandidate } from "@/lib/frequency";
+import { type HabitAlert, habitAlerts } from "@/lib/habit-alerts";
 import { loadHabitInstances } from "@/lib/habit-instances";
 import type { Habit, Item } from "@/lib/types";
 
@@ -15,6 +16,8 @@ export type TodayData = {
   done: Item[];
   /** 今日が該当日で、まだ当日インスタンス未生成の非pause習慣 */
   habitCandidates: Habit[];
+  /** 声をかけるべき習慣（救済中・残り回数が残り日数に並んだもの。docs/line-plan.md 9.1） */
+  habitAlerts: HabitAlert[];
 };
 
 // GETは副作用がないので、失敗したら一度だけ取り直す。
@@ -95,5 +98,5 @@ export async function loadTodayData(now: Date = new Date()): Promise<TodayData> 
       isPlannerCandidate(h.frequency_rule, today, doneDatesByHabit.get(h.id) ?? []),
   );
 
-  return { date: today, todos, done, habitCandidates };
+  return { date: today, todos, done, habitCandidates, habitAlerts: habitAlerts(habits, doneDatesByHabit, today) };
 }
