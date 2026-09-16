@@ -1,7 +1,12 @@
 // 繰り返しエンジン（純粋関数）。仕様は docs/database-design.md 4章。
 //
 // 中核設計: 次回インスタンスは「完了した瞬間」に1件だけ生成し、未消化の過去回は積み上げない。
-// そのため base = max(今日, 現在の回のdue_date) を下駄にして、常に「今日以降の直近1回」を返す。
+// そのため「現在の回より後」かつ「期限がまだ過ぎていない」最初の1回を返す。
+//
+// 期限が過ぎたかの判定は、時刻付きなら日付＋時刻で見る（2026-09-16変更）。
+// 日付だけで見ていた頃は、23:00期限のタスクを日付をまたいで完了すると
+// 今夜の分がまだ来ていないのに「今日は消化済み」と扱われ、丸ごと飛んでいた。
+// 時刻なしは従来どおり「今日より後」。完了した直後に同じタスクが今日に生え直すのを避ける。
 
 import { addDays, clampDayToMonth, isoWeekday, maxYmd } from "@/lib/date";
 import type { RecurrenceRule } from "@/lib/types";
@@ -47,17 +52,30 @@ function nextScheduleInterval(currentDueDate: string, n: number, base: string): 
 }
 
 /**
+ * 候補として許される最も早い日の「1日前」。各ヘルパーが「baseより後」を返すための下駄。
+ * 時刻付きで今日の期限がまだ来ていなければ今日を許し、過ぎていれば明日以降にする。
+ */
+function floorFor(today: string, dueTime: string | null, nowHm: string): string {
+  const todayStillOpen = dueTime !== null && nowHm <= dueTime.slice(0, 5);
+  return todayStillOpen ? addDays(today, -1) : today;
+}
+
+/**
  * 現在の回を完了したときに生成すべき次回の due_date を返す。
  * @param rule 繰り返しルール
  * @param currentDueDate 現在の回の due_date（'YYYY-MM-DD'）
  * @param today JSTの今日（'YYYY-MM-DD'）
+ * @param dueTime 現在の回の due_time（'HH:MM' / 'HH:MM:SS'）。nullなら時刻なし
+ * @param nowHm JSTの現在時刻（'HH:MM'）
  */
 export function computeNextDueDate(
   rule: RecurrenceRule,
   currentDueDate: string,
   today: string,
+  dueTime: string | null = null,
+  nowHm = "23:59",
 ): string {
-  const base = maxYmd(today, currentDueDate);
+  const base = maxYmd(floorFor(today, dueTime, nowHm), currentDueDate);
   switch (rule.type) {
     case "daily":
       return addDays(base, 1);

@@ -2,7 +2,7 @@
 // 既存の complete/uncomplete ルートと MCP から共用する。HTTP関心事は持たない
 // （呼び出し側が item を取得済みで渡す）。挙動は元のルート実装と同一。
 import "server-only";
-import { todayInJst } from "@/lib/date";
+import { nowHmInJst, todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { copyDescendantsForRecurrence, getReminders, insertReminders } from "@/lib/items";
 import { computeNextDueDate } from "@/lib/recurrence";
@@ -34,7 +34,13 @@ export async function completeItem(item: Item): Promise<{ item: Item; next: Item
 
   // 繰り返しがあれば次回を生成（due_date は制約により recurrence があれば必ず存在）
   if (item.recurrence_rule && item.due_date) {
-    const nextDue = computeNextDueDate(item.recurrence_rule, item.due_date, todayInJst());
+    const nextDue = computeNextDueDate(
+      item.recurrence_rule,
+      item.due_date,
+      todayInJst(),
+      item.due_time,
+      nowHmInJst(),
+    );
     const insertRow = {
       kind: "todo" as const,
       title: item.title,
