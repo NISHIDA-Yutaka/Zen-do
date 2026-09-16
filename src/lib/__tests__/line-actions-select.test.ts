@@ -81,7 +81,7 @@ describe("digestActions: 習慣ボタン", () => {
 });
 
 describe("digestActions", () => {
-  it("催促は時間を過ぎたものだけを操作対象にする", () => {
+  it("催促は時間が来ているものだけを操作対象にする", () => {
     const past = task({ title: "過ぎた", due_time: "09:00:00" });
     const future = task({ title: "これから", due_time: "20:00:00" });
     const { tasks, global } = digestActions(input({ slot: "evening", todos: [past, future] }));

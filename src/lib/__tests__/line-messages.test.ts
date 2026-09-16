@@ -84,6 +84,15 @@ describe("overdueOf", () => {
     expect(overdueOf([past, future], TODAY, "12:00")).toEqual([past]);
   });
 
+  it("同時刻ちょうども含める（19:00の便が19:00のタスクを落としていた）", () => {
+    const justNow = task({ due_time: "19:00:00" });
+    expect(overdueOf([justNow], TODAY, "19:00")).toEqual([justNow]);
+  });
+
+  it("まだ時刻が来ていないものは含めない", () => {
+    expect(overdueOf([task({ due_time: "19:01:00" })], TODAY, "19:00")).toEqual([]);
+  });
+
   it("時刻のないタスクは超過にしない", () => {
     expect(overdueOf([task({ due_time: null })], TODAY, "23:59")).toEqual([]);
   });

@@ -30,11 +30,15 @@ function hm(time: string): string {
   return time.slice(0, 5);
 }
 
-/** 期限時刻を過ぎた、または期日が今日より前のもの */
+/**
+ * 期限の時刻が来ている、または期日が今日より前のもの。
+ * 同時刻ちょうどを含める（<= にする）のは、19:00の便が19:00のタスクを落としていたため。
+ * cronは毎時ちょうどに届くので、厳密な不等号だと境界のタスクが必ず漏れる。
+ */
 export function overdueOf(todos: Item[], today: string, nowHm: string): Item[] {
   return todos.filter((t) => {
     if (t.due_date && t.due_date < today) return true;
-    return t.due_time ? hm(t.due_time) < nowHm : false;
+    return t.due_time ? hm(t.due_time) <= nowHm : false;
   });
 }
 
@@ -101,7 +105,7 @@ function nudge(input: DigestInput): string | null {
     return joinLines([head, ...habitLines]);
   }
   return joinLines([
-    `時間を過ぎたものが${overdue.length}件あります。`,
+    `時間が来ているものが${overdue.length}件あります。`,
     ...listOf(overdue),
     "もう終わっていたら下のボタンで完了にできます。あとに回しても大丈夫です。",
     ...habitLines,
