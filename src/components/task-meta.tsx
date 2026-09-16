@@ -25,7 +25,8 @@ function ClockIcon() {
   );
 }
 
-// 所要時間は砂時計で示す。時計（期限）と同じ大きさにして、形だけで種類が分かるようにする
+// 所要時間は砂時計で示す。時計（期限）と同じ大きさにして、形だけで種類が分かるようにする。
+// 字形は時計の円（3〜21）と同じ幅に広げてある。狭いと枠内の余白ぶん文字が離れて見える
 function HourglassIcon() {
   return (
     <svg
@@ -40,7 +41,7 @@ function HourglassIcon() {
       className="inline-block shrink-0"
       aria-hidden
     >
-      <path d="M7 3h10M7 21h10M8 3v4l4 5-4 5v4M16 3v4l-4 5 4 5v4" />
+      <path d="M4 3h16M4 21h16M5 3v4l7 5-7 5v4M19 3v4l-7 5 7 5v4" />
     </svg>
   );
 }
