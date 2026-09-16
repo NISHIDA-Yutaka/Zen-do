@@ -26,6 +26,41 @@ const HABIT_NAME_LIMIT = 3;
  */
 export const BUTTON_LIMIT = 5;
 
+/** 質問ブロックがある便では通常一覧のボタンを減らす（Flexの10KB上限に収めるため） */
+const BUTTON_LIMIT_WITH_STUCK = 3;
+
+/** 何回動かされたら「引っかかっている」とみなすか */
+export const STUCK_THRESHOLD = 2;
+
+/** 1通で質問する上限。多いと答えるのが億劫になるし、Flexの容量も食う */
+export const STUCK_LIMIT = 2;
+
+/**
+ * 引っかかっているタスク。先送りが重なった順に少しだけ。
+ * 習慣は日ごとに作られるもので「先送り」の概念が合わないため除く。
+ */
+export function stuckOf(todos: Item[]): Item[] {
+  return todos
+    .filter((t) => !t.habit_id && t.postponed_count >= STUCK_THRESHOLD)
+    .sort((a, b) => b.postponed_count - a.postponed_count)
+    .slice(0, STUCK_LIMIT);
+}
+
+/**
+ * 引っかかっているタスクへの問いかけ。
+ * 何回動かしたかは出さない（回数を突きつけても行動には繋がらない）。
+ */
+function stuckLines(stuck: Item[]): string[] {
+  if (stuck.length === 0) return [];
+  return [
+    stuck.length === 1
+      ? `「${stuck[0].title}」は何度か先に延びています。`
+      : "何度か先に延びているものがあります。",
+    ...(stuck.length === 1 ? [] : stuck.map((t) => `・${t.title}`)),
+    "何が引っかかっていますか？ 下のボタンで教えてください。",
+  ];
+}
+
 function hm(time: string): string {
   return time.slice(0, 5);
 }
@@ -95,29 +130,37 @@ function morning(input: DigestInput): string | null {
 
 function nudge(input: DigestInput): string | null {
   const { todos, habitAlerts } = input;
-  const overdue = overdueOf(todos, input.today, input.nowHm);
+  const stuck = stuckOf(todos);
+  const stuckIds = new Set(stuck.map((t) => t.id));
+  // 質問ブロックに出したものは通常の一覧から外す（同じ名前が二度出ないように）
+  const rest = todos.filter((t) => !stuckIds.has(t.id));
+  const overdue = overdueOf(rest, input.today, input.nowHm);
   const habitLines = habitAlertLines(habitAlerts);
-  // 過ぎたものも残りも習慣の催促も無ければ、わざわざ声をかけない
-  if (overdue.length === 0 && todos.length === 0 && habitLines.length === 0) return null;
-
-  if (overdue.length === 0) {
-    const head = todos.length > 0 ? `残りは${todos.length}件です。無理のない範囲で。` : null;
-    return joinLines([head, ...habitLines]);
+  if (overdue.length === 0 && rest.length === 0 && habitLines.length === 0 && stuck.length === 0) {
+    return null;
   }
-  return joinLines([
-    `時間が来ているものが${overdue.length}件あります。`,
-    ...listOf(overdue),
-    "もう終わっていたら下のボタンで完了にできます。あとに回しても大丈夫です。",
-    ...habitLines,
-  ]);
+
+  const body =
+    overdue.length > 0
+      ? [
+          `時間が来ているものが${overdue.length}件あります。`,
+          ...listOf(overdue),
+          "もう終わっていたら下のボタンで完了にできます。あとに回しても大丈夫です。",
+        ]
+      : [rest.length > 0 ? `残りは${rest.length}件です。無理のない範囲で。` : null];
+
+  return joinLines([...stuckLines(stuck), ...body, ...habitLines]);
 }
 
 function night(input: DigestInput): string | null {
   const { todos, done, inboxCount, habitAlerts } = input;
+  const stuck = stuckOf(todos);
+  const stuckIds = new Set(stuck.map((t) => t.id));
+  const rest = todos.filter((t) => !stuckIds.has(t.id));
   const habitLines = habitAlertLines(habitAlerts);
   if (todos.length === 0 && done.length === 0 && habitLines.length === 0) return null;
 
-  if (todos.length === 0) {
+  if (rest.length === 0 && stuck.length === 0) {
     return joinLines([
       "お疲れさまでした。",
       ...habitLines,
@@ -126,8 +169,9 @@ function night(input: DigestInput): string | null {
   }
   return joinLines([
     "お疲れさまでした。",
-    `残りは${todos.length}件です。`,
-    ...listOf(todos),
+    ...stuckLines(stuck),
+    rest.length > 0 ? `残りは${rest.length}件です。` : null,
+    ...listOf(rest),
     ...habitLines,
     inboxCount >= 5 ? `Inboxに${inboxCount}件たまっています。手が空いた時に仕分けましょう。` : null,
     "明日に回しても大丈夫。ゆっくり休んでください。",
@@ -159,28 +203,37 @@ export function digestActions(input: DigestInput): {
   global: GlobalAction;
   /** 習慣のボタン。深夜は「やった」まで済ませる（23時に追加だけでは意味がない） */
   habits: { habit: Habit; action: "hab_add" | "hab_done" }[];
+  /** 引っかかっているタスク（4択で聞く）。催促の枠だけ */
+  stuck: Item[];
 } {
   const habitAction = input.slot === "night" ? ("hab_done" as const) : ("hab_add" as const);
   const habits = input.habitAlerts.map((a) => ({ habit: a.habit, action: habitAction }));
+  const asking = input.slot === "morning" ? [] : stuckOf(input.todos);
+  const askingIds = new Set(asking.map((t) => t.id));
+  const rest = input.todos.filter((t) => !askingIds.has(t.id));
+  const limit = asking.length > 0 ? BUTTON_LIMIT_WITH_STUCK : BUTTON_LIMIT;
   switch (input.slot) {
     case "morning":
       return {
-        tasks: input.todos.slice(0, BUTTON_LIMIT),
+        tasks: rest.slice(0, limit),
         global: input.habitCandidates.length > 0 ? "habits" : null,
         habits,
+        stuck: asking,
       };
     case "noon":
     case "evening":
       return {
-        tasks: overdueOf(input.todos, input.today, input.nowHm).slice(0, BUTTON_LIMIT),
+        tasks: overdueOf(rest, input.today, input.nowHm).slice(0, limit),
         global: null,
         habits,
+        stuck: asking,
       };
     case "night":
       return {
-        tasks: input.todos.slice(0, BUTTON_LIMIT),
+        tasks: rest.slice(0, limit),
         global: input.todos.length > 0 ? "alltmr" : null,
         habits,
+        stuck: asking,
       };
   }
 }

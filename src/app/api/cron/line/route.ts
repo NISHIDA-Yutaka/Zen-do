@@ -71,12 +71,12 @@ export function GET(req: NextRequest): Promise<Response> {
       };
       const text = buildDigest(digestInput);
       if (preview) {
-        const { tasks, global, habits } = digestActions(digestInput);
+        const { tasks, global, habits, stuck } = digestActions(digestInput);
         results.push({
           slot,
           result: text ? "would_send" : "nothing_to_say",
           text,
-          message: text ? buildDigestMessage(text, tasks, global, habits) : null,
+          message: text ? buildDigestMessage(text, tasks, global, habits, stuck) : null,
         });
         continue;
       }
@@ -88,9 +88,9 @@ export function GET(req: NextRequest): Promise<Response> {
       // 1枠の失敗（枠切れ・LINE側の障害）で全体を500にしない。
       // cronサービスのログに理由が残るよう、結果として返す
       try {
-        const { tasks, global, habits } = digestActions(digestInput);
+        const { tasks, global, habits, stuck } = digestActions(digestInput);
         const push = await pushToAll(
-          [buildDigestMessage(text, tasks, global, habits)],
+          [buildDigestMessage(text, tasks, global, habits, stuck)],
           "digest",
           slot,
         );

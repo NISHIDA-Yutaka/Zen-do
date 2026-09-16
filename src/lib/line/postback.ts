@@ -5,6 +5,9 @@
 export type LineAction =
   | { kind: "done"; id: string }
   | { kind: "tmr"; id: string }
+  | { kind: "big"; id: string }
+  | { kind: "stuck"; id: string }
+  | { kind: "drop"; id: string }
   | { kind: "hab_add"; id: string }
   | { kind: "hab_done"; id: string }
   | { kind: "alltmr" }
@@ -22,7 +25,10 @@ export function parseAction(data: string): LineAction | null {
   const kind = params.get("a");
   const id = params.get("id");
   if (kind === "alltmr" || kind === "habits") return { kind };
-  if ((kind === "done" || kind === "tmr" || kind === "hab_add" || kind === "hab_done") && id)
-    return { kind, id };
+  const withId = ["done", "tmr", "big", "stuck", "drop", "hab_add", "hab_done"] as const;
+  type WithId = (typeof withId)[number];
+  if (id && (withId as readonly string[]).includes(kind ?? "")) {
+    return { kind: kind as WithId, id };
+  }
   return null;
 }

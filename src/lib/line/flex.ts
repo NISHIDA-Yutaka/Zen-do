@@ -65,6 +65,42 @@ function habitBlock({ habit, action }: HabitButton) {
   };
 }
 
+/** 引っかかっているタスクへの4択。2列×2段にして押し間違いを減らす */
+const STUCK_CHOICES = [
+  { label: "完了", kind: "done" },
+  { label: "大きすぎる", kind: "big" },
+  { label: "気が乗らない", kind: "stuck" },
+  { label: "もう要らない", kind: "drop" },
+] as const;
+
+function stuckBlock(item: Item) {
+  const row = (choices: (typeof STUCK_CHOICES)[number][]) => ({
+    type: "box" as const,
+    layout: "horizontal" as const,
+    spacing: "sm" as const,
+    contents: choices.map((c) =>
+      smallButton(c.label, encodeAction({ kind: c.kind, id: item.id }), `${c.label}: ${item.title}`),
+    ),
+  });
+  return {
+    type: "box" as const,
+    layout: "vertical" as const,
+    spacing: "xs" as const,
+    margin: "md" as const,
+    contents: [
+      {
+        type: "text" as const,
+        text: item.title,
+        size: "sm" as const,
+        wrap: true,
+        weight: "bold" as const,
+      },
+      row([STUCK_CHOICES[0], STUCK_CHOICES[1]]),
+      row([STUCK_CHOICES[2], STUCK_CHOICES[3]]),
+    ],
+  };
+}
+
 /**
  * 文面＋ボタン。操作対象が無ければただのテキストで送る
  * （Flexは通知欄に altText しか出ないので、飾りだけのために使わない）。
@@ -74,8 +110,11 @@ export function buildDigestMessage(
   tasks: Item[],
   global: GlobalAction,
   habits: HabitButton[] = [],
+  stuck: Item[] = [],
 ): messagingApi.Message {
-  if (tasks.length === 0 && global === null && habits.length === 0) return { type: "text", text };
+  if (tasks.length === 0 && global === null && habits.length === 0 && stuck.length === 0) {
+    return { type: "text", text };
+  }
 
   // altText（通知欄・引用に出る文字列）はLINE側の上限が400文字。
   // 超えると送信ごと弾かれてしまうので、ここで必ず収める
@@ -100,6 +139,7 @@ export function buildDigestMessage(
         layout: "vertical",
         contents: [
           { type: "text", text, size: "sm", wrap: true },
+          ...stuck.map(stuckBlock),
           ...tasks.map(taskBlock),
           ...habits.map(habitBlock),
         ],

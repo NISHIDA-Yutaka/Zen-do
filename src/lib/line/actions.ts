@@ -2,6 +2,7 @@
 // 応答は reply（無料）なので、ここでの操作は無料枠を消費しない。
 import "server-only";
 import { completeItem } from "@/lib/complete";
+import { breakdownTask } from "@/lib/gemini";
 import { db } from "@/lib/db";
 import { addDays, todayInJst } from "@/lib/date";
 import { instantiateHabit } from "@/lib/habit-instance";
@@ -54,6 +55,63 @@ async function runHabits(): Promise<string> {
   return `習慣を${added.length}件追加しました（${added.map((h) => h.title).join("、")}）。`;
 }
 
+/**
+ * 4択に答えたら先送り回数を0に戻す。
+ * 「介入したのでここから数え直す」という意味。戻さないと翌日も同じ質問が来る。
+ */
+async function resetPostponeCount(id: string): Promise<void> {
+  const { error } = await db.from("items").update({ postponed_count: 0 }).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/** 「大きすぎる」→ 分解して子ToDoにする（アプリの分解ボタンと同じ仕事） */
+async function runBig(id: string): Promise<string> {
+  const item = await getItem(id);
+  if (!item) return "そのタスクは見つかりませんでした。";
+  const parent = item.parent_id ? await getItem(item.parent_id) : null;
+  const steps = await breakdownTask({
+    title: item.title,
+    notes: item.notes,
+    projectTitle: parent?.title ?? null,
+    projectNotes: parent?.notes ?? null,
+    tags: item.tags,
+    dueDate: item.due_date,
+  });
+  if (steps.length === 0) return "うまく分解できませんでした。少し時間をおいて試してください。";
+
+  const rows = steps.map((title, i) => ({
+    kind: "todo" as const,
+    title,
+    notes: "",
+    tags: [],
+    status: "todo" as const,
+    parent_id: item.id,
+    sort_order: i,
+  }));
+  const { error } = await db.from("items").insert(rows);
+  if (error) throw new Error(error.message);
+
+  await resetPostponeCount(id);
+  return [`「${item.title}」を${steps.length}個に分けました。`, ...steps.map((s) => `・${s}`)].join("\n");
+}
+
+/** 「気が乗らない」→ 最初の一歩の提案（docs/line-plan.md 9.4）。まだ未実装 */
+async function runStuck(id: string): Promise<string> {
+  const item = await getItem(id);
+  if (!item) return "そのタスクは見つかりませんでした。";
+  await resetPostponeCount(id);
+  return `「${item.title}」、今日は置いておいて大丈夫です。\n最初の一歩を一緒に決められるようにするのは、これからの機能です。`;
+}
+
+/** 「もう要らない」→ 破棄（子孫ごと。アプリの削除と同じ） */
+async function runDrop(id: string): Promise<string> {
+  const item = await getItem(id);
+  if (!item) return "そのタスクは見つかりませんでした。";
+  const { error } = await db.from("items").update({ status: "dropped" }).eq("id", id);
+  if (error) throw new Error(error.message);
+  return `「${item.title}」を破棄しました。戻したくなったらアプリから戻せます。`;
+}
+
 async function getHabit(id: string): Promise<Habit | null> {
   const { data, error } = await db.from("habits").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
@@ -88,6 +146,12 @@ export function runAction(action: LineAction): Promise<string> {
       return runDone(action.id);
     case "tmr":
       return runTomorrow(action.id);
+    case "big":
+      return runBig(action.id);
+    case "stuck":
+      return runStuck(action.id);
+    case "drop":
+      return runDrop(action.id);
     case "hab_add":
       return runHabitAdd(action.id);
     case "hab_done":

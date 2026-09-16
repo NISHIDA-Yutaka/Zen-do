@@ -7,6 +7,9 @@ describe("encodeAction / parseAction", () => {
   const cases: LineAction[] = [
     { kind: "done", id: ID },
     { kind: "tmr", id: ID },
+    { kind: "big", id: ID },
+    { kind: "stuck", id: ID },
+    { kind: "drop", id: ID },
     { kind: "hab_add", id: ID },
     { kind: "hab_done", id: ID },
     { kind: "alltmr" },
@@ -40,6 +43,8 @@ describe("parseAction が受け付けないもの", () => {
     expect(parseAction("a=done")).toBeNull();
     expect(parseAction("a=tmr&id=")).toBeNull();
     expect(parseAction("a=hab_add")).toBeNull();
+    expect(parseAction("a=big")).toBeNull();
+    expect(parseAction("a=drop&id=")).toBeNull();
     expect(parseAction("a=hab_done&id=")).toBeNull();
   });
 
