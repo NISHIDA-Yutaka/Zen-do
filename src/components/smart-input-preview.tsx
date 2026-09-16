@@ -26,7 +26,7 @@ export function SmartPreview({
 
 function Chip({ token, onCancel }: { token: SmartToken; onCancel: () => void }) {
   const tone =
-    token.kind === "date" || token.kind === "time"
+    token.kind === "date" || token.kind === "time" || token.kind === "duration"
       ? "bg-asagi-soft text-asagi"
       : "bg-kinari text-foreground/80";
   return (

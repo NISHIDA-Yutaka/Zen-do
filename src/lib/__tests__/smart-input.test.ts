@@ -135,3 +135,44 @@ describe("複合", () => {
     expect(r.title).toBe("歯医者の予約");
   });
 });
+
+describe("所要時間（~）", () => {
+  const today = "2026-09-16";
+  const parse = (text: string) => parseSmartInput(text, { today });
+
+  it("~90m を所要時間として取り、タイトルから外す", () => {
+    const r = parse("資料を作る ~90m");
+    expect(r.durationMin).toBe(90);
+    expect(r.title).toBe("資料を作る");
+  });
+
+  it("時刻と所要時間は取り違えない（15時=時刻 / ~1h=所要時間）", () => {
+    const r = parse("打ち合わせ 15時 ~1h");
+    expect(r.dueTime).toBe("15:00");
+    expect(r.durationMin).toBe(60);
+    expect(r.title).toBe("打ち合わせ");
+  });
+
+  it("時分の組み合わせ", () => {
+    expect(parse("通院 ~1h20m").durationMin).toBe(80);
+    expect(parse("散歩 ~1.5h").durationMin).toBe(90);
+  });
+
+  it("~ が無ければ所要時間にしない", () => {
+    const r = parse("90m 走る");
+    expect(r.durationMin).toBeNull();
+    expect(r.title).toBe("90m 走る");
+  });
+
+  it("解釈できない ~ はタイトルに残す", () => {
+    const r = parse("波~の音を聞く");
+    expect(r.durationMin).toBeNull();
+    expect(r.title).toBe("波~の音を聞く");
+  });
+
+  it("チップには読みやすい形で出す", () => {
+    const token = parse("休憩 ~90m").tokens.find((t) => t.kind === "duration");
+    expect(token?.label).toBe("1時間30分");
+    expect(token?.raw).toBe("~90m");
+  });
+});

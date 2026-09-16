@@ -2,7 +2,7 @@
 
 import { MEMO_TAG } from "@/lib/client";
 import { nowHmInJst } from "@/lib/date";
-import { formatDueLabel } from "@/lib/format";
+import { formatDueLabel, formatDuration } from "@/lib/format";
 import { notesPreview } from "@/lib/markdown";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,26 @@ function ClockIcon() {
     >
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// 所要時間は砂時計で示す。時計（期限）と同じ大きさにして、形だけで種類が分かるようにする
+function HourglassIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="11"
+      height="11"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="inline-block shrink-0"
+      aria-hidden
+    >
+      <path d="M7 3h10M7 21h10M8 3v4l4 5-4 5v4M16 3v4l-4 5 4 5v4" />
     </svg>
   );
 }
@@ -44,7 +64,7 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
       {notePreview && (
         <span className="text-nibi/80 mt-0.5 block truncate text-[11px]">{notePreview}</span>
       )}
-      {(due || chips.length > 0) && (
+      {(due || item.duration_min !== null || chips.length > 0) && (
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {due && (
             <span
@@ -55,6 +75,12 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
             >
               <ClockIcon />
               {due.text}
+            </span>
+          )}
+          {item.duration_min !== null && (
+            <span className="text-nibi inline-flex items-center gap-1 text-[11px]">
+              <HourglassIcon />
+              {formatDuration(item.duration_min)}
             </span>
           )}
           {chips.map((c) => (

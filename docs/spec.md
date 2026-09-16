@@ -234,7 +234,7 @@ Habit: 状態遷移ではなく「実践ログ」の蓄積（continuous）。デ
 
 ### 10.1 実装済み（運用中）
 
-- Inbox / 爆速キャプチャ（Smart Input: `#タグ` `!Project` `今日/明日/明後日/来週/曜日/日付/時刻`）
+- Inbox / 爆速キャプチャ（Smart Input: `#タグ` `!Project` `今日/明日/明後日/来週/曜日/日付/時刻` `~所要時間`）
 - トリアージUI（Inboxで「今日」「明日」の2択。Project化は詳細モーダル）
 - Today ビュー / この先の予定 / Projects / Habits / Notes / Settings
 - デイリープランナー（Habit→当日ToDo生成）。**頻度は毎日・n日おき・週n回・月n回**（当初MVPの「毎日/曜日固定週次のみ」から拡張済み）

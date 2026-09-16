@@ -186,6 +186,36 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
+  // 所要時間の設定（右クリックメニュー）。一覧に出るだけなので他の行には影響しない
+  async function setDuration(item: Item, minutes: number | null) {
+    if (!data) return;
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutate(
+        async () => {
+          await patchJson(`/api/items/${item.id}`, { duration_min: minutes });
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            todos: data.todos.map((t) =>
+              t.id === item.id ? { ...t, duration_min: minutes } : t,
+            ),
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
   // 期限を外してInbox（未仕分け）へ送り、再スケジュールを促す。
   // 期日クリアに伴い繰り返しも外れる（DB制約 recurrence_requires_due_date）
   async function clearDue(item: Item) {
@@ -368,6 +398,12 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
                 openMenu(e, [
                   { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
                   { label: "Inboxへ", onSelect: () => clearDue(item) },
+                  "separator",
+                  {
+                    kind: "duration",
+                    current: item.duration_min,
+                    onSelect: (m) => setDuration(item, m),
+                  },
                   "separator",
                   { label: "削除", danger: true, onSelect: () => drop(item) },
                 ]);

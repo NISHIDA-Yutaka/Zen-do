@@ -1,9 +1,11 @@
 // Smart Input パーサ（純粋関数）。docs/design.md 11章。
-// 入力文から 期日/時刻/タグ/プロジェクト を解釈し、残りをタイトルにする。
+// 入力文から 期日/時刻/所要時間/タグ/プロジェクト を解釈し、残りをタイトルにする。
 // 解釈は「プレビュー→確定」のためトークン単位で返し、UI側で個別に取り消せる。
 import { addDays, daysInMonth, isoWeekday } from "@/lib/date";
+import { parseDuration } from "@/lib/duration";
+import { formatDuration } from "@/lib/format";
 
-export type TokenKind = "date" | "time" | "tag" | "project";
+export type TokenKind = "date" | "time" | "duration" | "tag" | "project";
 
 export type SmartToken = {
   kind: TokenKind;
@@ -11,13 +13,14 @@ export type SmartToken = {
   start: number;
   end: number;
   label: string; // チップ表示用
-  value: string; // date='YYYY-MM-DD' / time='HH:MM' / tag=タグ名 / project=プロジェクトid
+  value: string; // date='YYYY-MM-DD' / time='HH:MM' / duration=分 / tag=タグ名 / project=プロジェクトid
 };
 
 export type SmartParseResult = {
   title: string;
   dueDate: string | null;
   dueTime: string | null;
+  durationMin: number | null;
   tags: string[];
   projectId: string | null;
   tokens: SmartToken[];
@@ -146,6 +149,17 @@ const TIME_MATCHERS: Matcher[] = [
   },
 ];
 
+// 所要時間マッチャ。`~` を付けるのは、時刻（15時）や数字混じりのタイトルと取り違えないため
+const DURATION_MATCHERS: Matcher[] = [
+  {
+    re: /~(?:\d+(?:\.\d+)?h)?(?:\d+m)?/gi,
+    build: (m) => {
+      const min = parseDuration(m[0]);
+      return min === null ? null : { kind: "duration", label: formatDuration(min), value: String(min) };
+    },
+  },
+];
+
 function labelOf(ymdStr: string): string {
   return `${Number(ymdStr.slice(5, 7))}/${Number(ymdStr.slice(8))}`;
 }
@@ -177,6 +191,7 @@ export function parseSmartInput(
 
   const dateToken = firstMatch(text, DATE_MATCHERS, opts.today);
   const timeToken = firstMatch(text, TIME_MATCHERS, opts.today);
+  const durationToken = firstMatch(text, DURATION_MATCHERS, opts.today);
 
   // 日付と時刻の範囲が重なる場合は日付を優先（例: 8/16 が時刻に誤マッチしないための保険）
   const overlaps =
@@ -184,6 +199,7 @@ export function parseSmartInput(
 
   if (dateToken && !cancelled.has(tokenKey(dateToken))) tokens.push(dateToken);
   if (timeToken && !overlaps && !cancelled.has(tokenKey(timeToken))) tokens.push(timeToken);
+  if (durationToken && !cancelled.has(tokenKey(durationToken))) tokens.push(durationToken);
 
   // タグ（複数可）
   const tagRe = /#([^\s#!]+)/g;
@@ -239,6 +255,7 @@ export function parseSmartInput(
 
   const date = active.find((t) => t.kind === "date");
   const time = active.find((t) => t.kind === "time");
+  const duration = active.find((t) => t.kind === "duration");
   const project = active.find((t) => t.kind === "project");
 
   return {
@@ -246,6 +263,7 @@ export function parseSmartInput(
     // 時刻だけの指定は当日とみなす（docs/design.md 11.2）
     dueDate: date?.value ?? (time ? opts.today : null),
     dueTime: time?.value ?? null,
+    durationMin: duration ? Number(duration.value) : null,
     tags: active.filter((t) => t.kind === "tag").map((t) => t.value),
     projectId: project?.value ?? null,
     tokens: active,

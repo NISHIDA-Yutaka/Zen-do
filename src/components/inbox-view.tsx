@@ -209,6 +209,34 @@ export function InboxView() {
 
   const { open: openMenu, menu } = useContextMenu();
 
+  // 所要時間の設定（右クリックメニュー）。一覧に留まるので楽観的に値だけ差し替える
+  async function setDuration(item: Item, minutes: number | null, inUpcoming: boolean) {
+    setError(null);
+    setBusy(item.id, true);
+    const swap = (list: Item[]) =>
+      list.map((i) => (i.id === item.id ? { ...i, duration_min: minutes } : i));
+    const target = inUpcoming ? mutateUp : mutateInbox;
+    const current = inUpcoming ? upcoming : items;
+    try {
+      await target(
+        async () => {
+          await patchJson(`/api/items/${item.id}`, { duration_min: minutes });
+          return { items: swap(current) };
+        },
+        {
+          optimisticData: { items: swap(current) },
+          populateCache: true,
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
   async function triage(item: Item, dueDate: string) {
     setError(null);
     setBusy(item.id, true);
@@ -263,6 +291,12 @@ export function InboxView() {
                   // 未仕分けは期限なし＝「Inboxへ」は無意味なので出さない
                   openMenu(e, [
                     { label: "明日へ", onSelect: () => triage(item, addDays(today, 1)) },
+                    "separator",
+                    {
+                      kind: "duration",
+                      current: item.duration_min,
+                      onSelect: (m) => setDuration(item, m, false),
+                    },
                     "separator",
                     { label: "削除", danger: true, onSelect: () => drop(item) },
                   ]);
@@ -345,6 +379,12 @@ export function InboxView() {
                             },
                             true,
                           ),
+                      },
+                      "separator",
+                      {
+                        kind: "duration",
+                        current: item.duration_min,
+                        onSelect: (m) => setDuration(item, m, true),
                       },
                       "separator",
                       {

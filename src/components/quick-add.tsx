@@ -12,6 +12,7 @@ export type QuickAddPayload = {
   title: string;
   due_date?: string | null;
   due_time?: string | null;
+  duration_min?: number | null;
   tags?: string[];
   parent_id?: string | null;
   captured_raw?: string;
@@ -80,6 +81,7 @@ function buildPayload(
     title,
     due_date: parsed.dueDate ?? defaultDueDate ?? null,
     due_time: parsed.dueTime,
+    duration_min: parsed.durationMin,
     tags: parsed.tags,
     parent_id: parsed.projectId,
     captured_raw: text,
