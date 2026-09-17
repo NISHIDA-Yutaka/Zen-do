@@ -46,6 +46,16 @@ function HourglassIcon() {
   );
 }
 
+/** 所要時間の表示。Todayの一覧とInboxの未仕分けで同じ見た目にするため部品にしてある */
+export function DurationLabel({ minutes }: { minutes: number }) {
+  return (
+    <span className="text-nibi inline-flex items-center gap-1 text-[11px]">
+      <HourglassIcon />
+      {formatDuration(minutes)}
+    </span>
+  );
+}
+
 // タスク行のタイトル＋メタ行（docs/design.md 2章）。Today と Inboxの「この先の予定」で共用。
 // メタ行は「時刻 → 期限超過 → タグ（無彩色） → 繰り返し/習慣（asagi）」の順。
 export function TaskMeta({ item, today }: { item: Item; today: string }) {
@@ -78,12 +88,7 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
               {due.text}
             </span>
           )}
-          {item.duration_min !== null && (
-            <span className="text-nibi inline-flex items-center gap-1 text-[11px]">
-              <HourglassIcon />
-              {formatDuration(item.duration_min)}
-            </span>
-          )}
+          {item.duration_min !== null && <DurationLabel minutes={item.duration_min} />}
           {chips.map((c) => (
             <span
               key={c.text}

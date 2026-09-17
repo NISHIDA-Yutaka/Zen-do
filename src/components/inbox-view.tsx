@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
-import { TaskMeta } from "@/components/task-meta";
+import { DurationLabel, TaskMeta } from "@/components/task-meta";
 import { useContextMenu } from "@/components/task-context-menu";
 import { addDays, todayInJst } from "@/lib/date";
 import {
@@ -316,9 +316,14 @@ export function InboxView() {
                 <button
                   type="button"
                   onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
-                  className="min-w-0 flex-1 text-left text-sm font-medium break-words"
+                  className="min-w-0 flex-1 text-left"
                 >
-                  {item.title}
+                  <span className="block text-sm font-medium break-words">{item.title}</span>
+                  {item.duration_min !== null && (
+                    <span className="mt-0.5 block">
+                      <DurationLabel minutes={item.duration_min} />
+                    </span>
+                  )}
                 </button>
                 <span className="flex shrink-0 gap-1.5">
                   <button
