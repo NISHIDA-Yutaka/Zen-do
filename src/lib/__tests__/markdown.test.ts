@@ -61,6 +61,22 @@ describe("normalizeIndent", () => {
     expect(normalizeIndent("\t1. 番号")).toBe("  1. 番号");
   });
 
+  it("入れ子の字下げは親の項目の本文位置に揃える（番号付きの下は3桁）", () => {
+    expect(normalizeIndent("1. 親\n\t1. 子")).toBe("1. 親\n   1. 子");
+    expect(normalizeIndent("10. 親\n\t- 子")).toBe("10. 親\n    - 子");
+    expect(normalizeIndent("1. a\n\t- b\n\t\t1. c")).toBe("1. a\n   - b\n     1. c");
+  });
+
+  it("入れ子から戻った後は、戻った先の親に合わせる", () => {
+    expect(normalizeIndent("- a\n\t1. b\n\t\t- c\n\t1. d\n\t\t- e")).toBe(
+      "- a\n  1. b\n     - c\n  1. d\n     - e",
+    );
+  });
+
+  it("地の文を挟んだら親の記憶を捨てる", () => {
+    expect(normalizeIndent("1. a\n本文\n\t- b")).toBe("1. a\n本文\n  - b");
+  });
+
   it("箇条書き以外のタブ行は見た目のインデントを保つ空白にする", () => {
     expect(normalizeIndent("弓：魂系の弓\n\t【必須】")).toBe(`弓：魂系の弓\n${NB}【必須】`);
     expect(normalizeIndent("\t\t深い注記")).toBe(`${NB}${NB}深い注記`);

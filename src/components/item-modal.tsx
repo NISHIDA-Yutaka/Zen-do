@@ -15,6 +15,7 @@ import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists,
 import { todayInJst } from "@/lib/date";
 import { isFinePointer } from "@/lib/pointer";
 import { formatDueFull, formatDuration, formatRecurrenceRule } from "@/lib/format";
+import { continueList, removeListMarker, shiftListItem, type TextEdit } from "@/lib/markdown-input";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -596,13 +597,19 @@ function TitleField({
   );
 }
 
-// メモ編集中の Tab=インデント / Shift+Tab=解除（1段＝タブ1つ・docs/design.md 13.4）。
+// メモ編集中の Tab=インデント / Shift+Tab=解除（1段＝タブ1つ・docs/design.md 13.4）。リストの行は行全体を動かす。
 // execCommand を使うのは、ブラウザ標準の取り消し履歴（Ctrl+Z）を壊さないため。
 function indentOnTab(e: React.KeyboardEvent<HTMLTextAreaElement>) {
   if (e.key !== "Tab" || e.nativeEvent.isComposing) return;
   e.preventDefault();
   const ta = e.currentTarget;
   const { value, selectionStart: start, selectionEnd: end } = ta;
+
+  const listEdit = shiftListItem(value, start, end, e.shiftKey);
+  if (listEdit) {
+    applyEdit(ta, listEdit);
+    return;
+  }
 
   // 範囲選択していないTabは、その場にタブを差し込むだけ
   if (start === end && !e.shiftKey) {
@@ -626,6 +633,32 @@ function indentOnTab(e: React.KeyboardEvent<HTMLTextAreaElement>) {
   ta.setSelectionRange(from, from + indented.length);
 }
 
+function applyEdit(ta: HTMLTextAreaElement, edit: TextEdit) {
+  ta.setSelectionRange(edit.from, edit.to);
+  if (edit.insert) document.execCommand("insertText", false, edit.insert);
+  else document.execCommand("delete");
+  ta.setSelectionRange(edit.cursor, edit.cursor);
+}
+
+// リストの引き継ぎ（改行）と記号の一括削除（Backspace）。docs/design.md 13.4。
+// keydown ではなく beforeinput で拾うのは、スマホのソフトキーボードが Enter/Backspace を
+// keydown に載せないことがあるため（Androidは key が "Unidentified" になる）。
+// PCのEnterは keydown で確定に使って止めているので、ここに来るのは Shift+Enter だけ
+function assistListInput(e: InputEvent) {
+  if (e.isComposing || !e.cancelable) return;
+  const ta = e.currentTarget as HTMLTextAreaElement;
+  const { value, selectionStart, selectionEnd } = ta;
+  const edit =
+    e.inputType === "insertLineBreak" || e.inputType === "insertParagraph"
+      ? continueList(value, selectionStart, selectionEnd)
+      : e.inputType === "deleteContentBackward"
+        ? removeListMarker(value, selectionStart, selectionEnd)
+        : null;
+  if (!edit) return;
+  e.preventDefault();
+  applyEdit(ta, edit);
+}
+
 // メモはMarkdown（docs/design.md 7.2 / 13.4）。普段は整形して表示し、タップでtextarea編集に切り替える。
 // フォーカスを外した時点で保存し、また整形表示に戻る。
 // PC は Enter=確定 / Shift+Enter=改行。タッチ端末は Enter をそのまま改行に使う
@@ -633,13 +666,22 @@ function indentOnTab(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => void }) {
   const [v, setV] = useState(notes);
   const [editing, setEditing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setV(notes), [notes]);
+  // React の onBeforeInput は inputType を持たないので、ネイティブのイベントを直接購読する
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!editing || !ta) return;
+    ta.addEventListener("beforeinput", assistListInput);
+    return () => ta.removeEventListener("beforeinput", assistListInput);
+  }, [editing]);
 
   if (editing) {
     // この分岐は操作後にしか描画されないので、ここでポインタ種別を読んでも初期描画とずれない
     const fine = isFinePointer();
     return (
       <textarea
+        ref={textareaRef}
         autoFocus
         value={v}
         onChange={(e) => setV(e.target.value)}

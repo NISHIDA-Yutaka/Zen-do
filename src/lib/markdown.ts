@@ -41,12 +41,16 @@ export function notesPreview(notes: string): string {
 // 中断できないため、素のままだと「タブ＋箇条書き」が前の段落に吸収されリストにならない。
 // タブ1つを1段として、箇条書きは実スペース（入れ子リストとして解釈させる）、
 // それ以外の行は解析時に捨てられない空白（NBSP）に変換して見た目のインデントを残す。
-const LIST_MARKER = /^([-*+]|\d+[.)])\s/;
+// 入れ子の字下げ幅は親の項目の本文位置に揃える。「1. 」の下は3桁要るので、一律2スペースだと
+// 番号付きの入れ子が兄弟の項目になってしまう（2026-09-25）
+const LIST_MARKER = /^([-*+]|\d+[.)])\s+/;
 const INDENT_UNIT = "  ";
 const VISUAL_INDENT_UNIT = "\u00A0\u00A0";
 
 export function normalizeIndent(md: string): string {
   let inFence = false;
+  // 深さ（タブの数）ごとの、直近の項目の本文開始桁
+  let contentCols: number[] = [];
   return md
     .split("\n")
     .map((line) => {
@@ -55,11 +59,20 @@ export function normalizeIndent(md: string): string {
         return line;
       }
       if (inFence) return line; // コードブロックの中身は原文のまま
-      const m = /^(\t+)(.*)$/.exec(line);
-      if (!m) return line;
-      const [, tabs, rest] = m;
-      const unit = LIST_MARKER.test(rest) ? INDENT_UNIT : VISUAL_INDENT_UNIT;
-      return unit.repeat(tabs.length) + rest;
+      const depth = /^\t*/.exec(line)?.[0].length ?? 0;
+      const rest = line.slice(depth);
+      const marker = LIST_MARKER.exec(rest);
+      if (!marker) {
+        // 字下げのない地の文でリストは終わる
+        if (depth === 0 && rest.trim() !== "") contentCols = [];
+        return depth === 0 ? line : VISUAL_INDENT_UNIT.repeat(depth) + rest;
+      }
+      const spaces = depth === 0 ? 0 : (contentCols[depth - 1] ?? INDENT_UNIT.length * depth);
+      // 親の無い深さから始まることもあるので、添字で深さの位置に置く（push だと段がずれる）
+      const next = contentCols.slice(0, depth);
+      next[depth] = spaces + marker[0].length;
+      contentCols = next;
+      return " ".repeat(spaces) + rest;
     })
     .join("\n");
 }
