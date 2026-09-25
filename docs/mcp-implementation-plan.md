@@ -127,11 +127,8 @@ MCPクライアント ──Streamable HTTP──▶ src/app/api/mcp/route.ts（
 
 ### 3.4 ツールのdescriptionが最重要
 
-AIの振る舞いはdescriptionで決まる。例:
-
-> `list_inbox`: 「未仕分けタスク一覧。`stale_days` は放置日数。7日以上のものは会話で言及して再スケジュールを促すとよい」
-
-「いつやりますか？」と自発的に聞かせたいなら、そう書く。
+descriptionには「何を返すか・どう呼ぶか・何が起きるか」を、件数の上限や失敗時の挙動まで含めて正確に書く。
+会話の運び方（放置タスクに「いつやりますか？」と自発的に聞かせる等）はサーバーの `instructions` に置く（`src/lib/mcp/server.ts`）。
 
 ## 4. 第2段: 操作ツール＋ガードレール
 

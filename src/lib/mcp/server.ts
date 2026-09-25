@@ -37,7 +37,19 @@ const timeStr = z
 const expectedTitle = z
   .string()
   .min(1)
-  .describe("操作対象の現在のタイトル（取り違え防止のため実タイトルと一致が必要）");
+  .describe(
+    "操作対象の現在のタイトル。取り違え防止のため、前後の空白を除いて実タイトルと完全一致が必要。" +
+      "一致しなければ何も変更せず、実際のタイトル付きのエラーを返す",
+  );
+const taskId = z.string().uuid().describe("タスクのUUID（find_task や list_* の返り値の id）");
+const habitId = z.string().uuid().describe("習慣のUUID（list_habits の返り値の id）");
+
+// 会話の運び方はツール説明ではなくここに置く。ツール説明は「何を返し、どう呼ぶか」の契約に保つ
+const INSTRUCTIONS = [
+  "Zendo はユーザー本人（ADHDの当事者）が使う個人用のタスク管理アプリ。",
+  "Inbox に7日以上放置されているタスク（stale_days が7以上）があれば話題に出し、いつやるかを尋ねる。決まったら set_due で期日を付ける。",
+  "習慣の継続記録（list_habits の streak）が伸びていれば、会話の中で触れてよい。",
+].join("\n");
 
 export const mcpHandler = createMcpHandler((server) => {
   server.registerTool(
@@ -46,8 +58,7 @@ export const mcpHandler = createMcpHandler((server) => {
       title: "今日の状況サマリ",
       description:
         "今日のタスク・期限超過・Inbox未仕分けを1回でまとめて返す。会話の起点に使う。" +
-        "overdue には期限を過ぎたタスク（過去日 or 当日で時刻超過）、inbox の stale_days は放置日数。" +
-        "放置が長いタスクは会話で触れて再スケジュールを促すとよい。",
+        "overdue には期限を過ぎたタスク（過去日 or 当日で時刻超過）、inbox の stale_days は放置日数。",
       inputSchema: z.object({}),
     },
     async () => ok(await getStatus()),
@@ -70,8 +81,8 @@ export const mcpHandler = createMcpHandler((server) => {
     {
       title: "Inbox（未仕分け）一覧",
       description:
-        "期日が未設定の未仕分けタスク。stale_days は作成からの放置日数。" +
-        "7日以上放置のものは「いつやりますか？」と会話で促し、set_due で期日を付けると片付く（第2段のツール）。",
+        "期日が未設定の未仕分けタスク（プロジェクトの子と #memo 付きは除く）を返す。stale_days は作成からの放置日数。" +
+        "期日を付けて仕分けるには set_due を使う。",
       inputSchema: z.object({}),
     },
     async () => ok(await listInbox()),
@@ -81,7 +92,9 @@ export const mcpHandler = createMcpHandler((server) => {
     "list_upcoming",
     {
       title: "この先の予定",
-      description: "今日より後で、指定日数以内に期日があるタスクを日付順に返す。",
+      description:
+        "今日より後で、指定日数以内に期日がある未完了タスクを日付・時刻順に返す。" +
+        "最大100件で打ち切られ、打ち切りは返り値に示されないので、件数が多い期間は days を短くして分けて呼ぶ。",
       inputSchema: z.object({
         days: z.number().int().min(1).max(365).optional().describe("今日から何日先まで見るか（既定14）"),
       }),
@@ -120,9 +133,9 @@ export const mcpHandler = createMcpHandler((server) => {
     {
       title: "タスクを検索",
       description:
-        "タイトルの部分一致でタスク候補を返す（未完了を優先）。" +
-        "**候補が複数あるときは自動で1件に決めず、ユーザーに確認すること**。0件なら空配列で返る。" +
-        "第2段の操作ツールに渡す id を特定する用途。",
+        "タイトルの部分一致でタスク候補を返す（未完了が先、完了済みも含む。最大100件）。0件なら空配列で返る。" +
+        "complete_task・set_due などの操作ツールに渡す id を特定する用途。" +
+        "候補が複数あるときは1件に決めず、どれか本人に確認する（取り違えると別のタスクを完了・変更してしまうため）。",
       inputSchema: z.object({ query: z.string().min(1).describe("タイトルに含まれる文字列") }),
     },
     async ({ query }) => ok(await findTask(query)),
@@ -133,8 +146,7 @@ export const mcpHandler = createMcpHandler((server) => {
     {
       title: "習慣一覧と継続指標",
       description:
-        "習慣ごとの継続記録（streak/streak_unit）・今週または今月の進捗・今日の候補かどうか（is_today_candidate）を返す。" +
-        "『Duolingoは969日連続です』のように継続を会話に反映できる。",
+        "習慣ごとの継続記録（streak/streak_unit）・今週または今月の進捗・今日の候補かどうか（is_today_candidate）を返す。",
       inputSchema: z.object({}),
     },
     async () => ok(await listHabits()),
@@ -167,7 +179,7 @@ export const mcpHandler = createMcpHandler((server) => {
       description:
         "タスクを完了にする。繰り返しタスクなら次回が自動生成され、習慣なら継続記録に加算される。" +
         "id は find_task/list_* で得たものを使い、expected_title にその時のタイトルを渡すこと。",
-      inputSchema: z.object({ id: z.string().uuid(), expected_title: expectedTitle }),
+      inputSchema: z.object({ id: taskId, expected_title: expectedTitle }),
     },
     async ({ id, expected_title }) => ok(await completeTask(id, expected_title)),
   );
@@ -177,7 +189,7 @@ export const mcpHandler = createMcpHandler((server) => {
     {
       title: "完了を取り消す",
       description: "完了済みタスクを未完了に戻す。繰り返しで生成された次回分があれば巻き戻す。",
-      inputSchema: z.object({ id: z.string().uuid(), expected_title: expectedTitle }),
+      inputSchema: z.object({ id: taskId, expected_title: expectedTitle }),
     },
     async ({ id, expected_title }) => ok(await uncompleteTask(id, expected_title)),
   );
@@ -191,7 +203,7 @@ export const mcpHandler = createMcpHandler((server) => {
         "ただし繰り返しタスクは期日クリアで繰り返し設定が消えるため拒否される（具体的な日付への変更は可）。" +
         "due_time を省略した日付変更は既存の時刻を保持する。",
       inputSchema: z.object({
-        id: z.string().uuid(),
+        id: taskId,
         expected_title: expectedTitle,
         due_date: dateStr.nullable().describe("新しい期日。null で期日を外す（Inboxへ）"),
         due_time: timeStr.optional(),
@@ -208,7 +220,7 @@ export const mcpHandler = createMcpHandler((server) => {
       description:
         "習慣を当日タスクとして生成する（Habits画面の『今日やる』相当）。habit_id は list_habits で得る。" +
         "同日に二重生成はされない（既に追加済みならその旨を返す）。",
-      inputSchema: z.object({ habit_id: z.string().uuid(), expected_title: expectedTitle }),
+      inputSchema: z.object({ habit_id: habitId, expected_title: expectedTitle }),
     },
     async ({ habit_id, expected_title }) => ok(await addHabitToday(habit_id, expected_title)),
   );
@@ -222,7 +234,7 @@ export const mcpHandler = createMcpHandler((server) => {
         "append=false（既定）で全文置換。全置換の前は get_notes で現状を読むこと。" +
         "id は find_task/list_* で得たものを使い、expected_title に現在のタイトルを渡す（取り違え防止）。",
       inputSchema: z.object({
-        id: z.string().uuid(),
+        id: taskId,
         expected_title: expectedTitle,
         notes: z.string().max(8000).describe("append=true なら追記する文、false なら置き換える全文"),
         append: z.boolean().optional().describe("true=末尾に追記 / false（既定）=全文置換"),
@@ -231,4 +243,4 @@ export const mcpHandler = createMcpHandler((server) => {
     async ({ id, expected_title, notes, append }) =>
       ok(await updateNotes(id, expected_title, notes, append ?? false)),
   );
-});
+}, { instructions: INSTRUCTIONS });
