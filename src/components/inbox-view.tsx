@@ -8,6 +8,7 @@ import { ChildTaskRows, ExpandToggle, toggleIn } from "@/components/task-childre
 import { DurationLabel, TaskMeta } from "@/components/task-meta";
 import { useContextMenu } from "@/components/task-context-menu";
 import { addDays, todayInJst } from "@/lib/date";
+import type { DuePatch } from "@/lib/due-input";
 import {
   getJson,
   INBOX_QUERY,
@@ -224,6 +225,35 @@ export function InboxView() {
     }
   }
 
+  // 「この先の予定」の日時の付け直し。先の日付なら値を差し替えて残し、今日以前ならTodayへ移るので除去
+  async function rescheduleUpcoming(item: Item, patch: DuePatch) {
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutateUp(
+        async () => {
+          await patchJson(`/api/items/${item.id}`, patch);
+          return undefined;
+        },
+        {
+          optimisticData: upList(
+            patch.due_date > today
+              ? upcoming.map((i) => (i.id === item.id ? { ...i, ...patch } : i))
+              : upcoming.filter((i) => i.id !== item.id),
+          ),
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+      if (patch.due_date <= today) void globalMutate(TODAY_KEY);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
   // 予定から外れる操作（Inboxへ=期限削除 / 削除=破棄）を楽観的に除去して実行
   async function removeFromUpcoming(item: Item, action: () => Promise<void>, toInbox = false) {
     setError(null);
@@ -279,14 +309,16 @@ export function InboxView() {
     }
   }
 
-  async function triage(item: Item, dueDate: string) {
+  // 仕分け=期日を設定するだけ（kindは既にtodo。docs/design.md 8章）。
+  // 右クリックの日時入力からは時刻も一緒に来る
+  async function triage(item: Item, patch: DuePatch) {
+    const dueDate = patch.due_date;
     setError(null);
     setBusy(item.id, true);
     try {
-      // 仕分け=期日を設定するだけ（kindは既にtodo。docs/design.md 8章）
       await mutateInbox(
         async () => {
-          await patchJson(`/api/items/${item.id}`, { due_date: dueDate });
+          await patchJson(`/api/items/${item.id}`, patch);
           return inboxList(items.filter((i) => i.id !== item.id));
         },
         {
@@ -333,7 +365,15 @@ export function InboxView() {
                     if (busy) return;
                     // 未仕分けは期限なし＝「Inboxへ」は無意味なので出さない
                     openMenu(e, [
-                      { label: "明日へ", onSelect: () => triage(item, addDays(today, 1)) },
+                      { label: "明日へ", onSelect: () => triage(item, { due_date: addDays(today, 1) }) },
+                      "separator",
+                      {
+                        kind: "due",
+                        current: { date: null, time: null },
+                        today,
+                        recurring: false,
+                        onSelect: (patch) => triage(item, patch),
+                      },
                       "separator",
                       {
                         kind: "duration",
@@ -378,7 +418,7 @@ export function InboxView() {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => triage(item, todayInJst())}
+                      onClick={() => triage(item, { due_date: todayInJst() })}
                       className="border-wakuiro text-foreground/80 hover:bg-kinari hit-y rounded-lg border px-3 py-1 text-xs font-semibold"
                     >
                       今日
@@ -386,7 +426,7 @@ export function InboxView() {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => triage(item, addDays(todayInJst(), 1))}
+                      onClick={() => triage(item, { due_date: addDays(todayInJst(), 1) })}
                       className="border-wakuiro text-foreground/80 hover:bg-kinari hit-y rounded-lg border px-3 py-1 text-xs font-semibold"
                     >
                       明日
@@ -429,22 +469,30 @@ export function InboxView() {
                     <li
                       onContextMenu={(e) => {
                         if (busyIds.has(item.id)) return;
+                        // 期日を外す（「Inboxへ」と日時欄の✕で共用）。繰り返しはDB制約で一緒に外す
+                        const toInbox = () =>
+                          removeFromUpcoming(
+                            item,
+                            async () => {
+                              await patchJson(`/api/items/${item.id}`, {
+                                due_date: null,
+                                due_time: null,
+                                recurrence_rule: null,
+                              });
+                            },
+                            true,
+                          );
                         openMenu(e, [
                           { label: "明日へ", onSelect: () => shiftUpcomingToTomorrow(item) },
+                          { label: "Inboxへ", onSelect: toInbox },
+                          "separator",
                           {
-                            label: "Inboxへ",
-                            onSelect: () =>
-                              removeFromUpcoming(
-                                item,
-                                async () => {
-                                  await patchJson(`/api/items/${item.id}`, {
-                                    due_date: null,
-                                    due_time: null,
-                                    recurrence_rule: null,
-                                  });
-                                },
-                                true,
-                              ),
+                            kind: "due",
+                            current: { date: item.due_date, time: item.due_time },
+                            today,
+                            recurring: item.recurrence_rule !== null,
+                            onSelect: (patch) => rescheduleUpcoming(item, patch),
+                            onClear: toInbox,
                           },
                           "separator",
                           {

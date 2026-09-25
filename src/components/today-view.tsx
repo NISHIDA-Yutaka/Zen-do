@@ -17,6 +17,7 @@ import {
   TODAY_KEY,
 } from "@/lib/client";
 import { addDays } from "@/lib/date";
+import type { DuePatch } from "@/lib/due-input";
 import { nestChildren } from "@/lib/task-tree";
 import type { Habit, Item } from "@/lib/types";
 import { useListKeyboard } from "@/lib/use-list-keyboard";
@@ -180,6 +181,38 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
           rollbackOnError: true,
         },
       );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(item.id, false);
+    }
+  }
+
+  // 右クリックの日時の付け直し。今日以前ならリストに残して値を差し替え、先の日付なら楽観的に除去
+  async function reschedule(item: Item, patch: DuePatch) {
+    if (!data) return;
+    setError(null);
+    setBusy(item.id, true);
+    try {
+      await mutate(
+        async () => {
+          await patchJson(`/api/items/${item.id}`, patch);
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            todos:
+              patch.due_date <= data.date
+                ? data.todos.map((t) => (t.id === item.id ? { ...t, ...patch } : t))
+                : data.todos.filter((t) => t.id !== item.id),
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+      if (patch.due_date > data.date) void revalidateLists();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -447,6 +480,15 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
                   openMenu(e, [
                     { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
                     { label: "Inboxへ", onSelect: () => clearDue(item) },
+                    "separator",
+                    {
+                      kind: "due",
+                      current: { date: item.due_date, time: item.due_time },
+                      today: data.date,
+                      recurring: item.recurrence_rule !== null,
+                      onSelect: (patch) => reschedule(item, patch),
+                      onClear: () => clearDue(item),
+                    },
                     "separator",
                     {
                       kind: "duration",

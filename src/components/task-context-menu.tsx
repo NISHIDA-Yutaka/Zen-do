@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type DuePatch, parseDueInput } from "@/lib/due-input";
 import { parseDuration } from "@/lib/duration";
-import { formatDuration } from "@/lib/format";
+import { formatDueFull, formatDuration } from "@/lib/format";
 import { isFinePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,15 @@ export type ContextMenuItem =
   | { label: string; onSelect: () => void; danger?: boolean }
   // 所要時間だけは選択肢が多いので、1行ずつ並べず専用の面として出す
   | { kind: "duration"; current: number | null; onSelect: (minutes: number | null) => void }
+  // 日時の付け直し。onClear が無い＝外す操作を出さない（期日の無いInboxのタスク）
+  | {
+      kind: "due";
+      current: { date: string | null; time: string | null };
+      today: string;
+      recurring: boolean;
+      onSelect: (patch: DuePatch) => void;
+      onClear?: () => void;
+    }
   | "separator";
 
 type MenuState = { x: number; y: number; items: ContextMenuItem[] } | null;
@@ -72,6 +82,23 @@ function ContextMenu({ state, onClose }: { state: NonNullable<MenuState>; onClos
       {state.items.map((it, i) =>
         it === "separator" ? (
           <li key={i} className="border-keisen my-1 border-t" aria-hidden />
+        ) : "kind" in it && it.kind === "due" ? (
+          <li key={i}>
+            <DuePicker
+              {...it}
+              onSelect={(patch) => {
+                it.onSelect(patch);
+                onClose();
+              }}
+              onClear={
+                it.onClear &&
+                (() => {
+                  it.onClear?.();
+                  onClose();
+                })
+              }
+            />
+          </li>
         ) : "kind" in it ? (
           <li key={i}>
             <DurationPicker
@@ -101,6 +128,73 @@ function ContextMenu({ state, onClose }: { state: NonNullable<MenuState>; onClos
         ),
       )}
     </menu>
+  );
+}
+
+function dueText(date: string, time: string | null, today: string): string {
+  return formatDueFull(date, time, today).text;
+}
+
+// 今の日時の表示＋Smart Inputと同じ語彙の入力欄。入力中は解釈結果を下に出し、読めなければ枠を紅にする
+function DuePicker({
+  current,
+  today,
+  recurring,
+  onSelect,
+  onClear,
+}: {
+  current: { date: string | null; time: string | null };
+  today: string;
+  recurring: boolean;
+  onSelect: (patch: DuePatch) => void;
+  onClear?: () => void;
+}) {
+  const [text, setText] = useState("");
+  const patch = parseDueInput(text, { today, currentDate: current.date });
+  const invalid = text.trim() !== "" && patch === null;
+
+  return (
+    <div className="px-3 py-2">
+      <p className="text-nibi pb-1">日時</p>
+      <p className="flex items-center justify-between gap-2">
+        <span className={cn("text-[12px]", current.date ? "font-semibold" : "text-nibi")}>
+          {current.date ? dueText(current.date, current.time, today) : "なし"}
+        </span>
+        {onClear && current.date && (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="日時を外す"
+            // 期日を外すと繰り返しも外れる（DB制約 recurrence_requires_due_date）ので、その旨を添える
+            title={recurring ? "日時を外す（繰り返しも解除されます）" : "日時を外す"}
+            className="text-nibi hover:text-beni hit shrink-0 px-1 leading-none"
+          >
+            ✕
+          </button>
+        )}
+      </p>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            if (patch) onSelect(patch);
+          }
+        }}
+        placeholder="明日 18:00 / 9/30 / 金 / 21時"
+        aria-label="日時を入力"
+        className={cn(
+          "mt-1.5 w-full rounded-md border px-2 py-1 text-[11px] outline-none",
+          invalid ? "border-beni" : "border-wakuiro focus:border-mikan",
+        )}
+      />
+      {patch && (
+        <p className="text-mikan pt-1 text-[11px] font-semibold">
+          → {dueText(patch.due_date, patch.due_time ?? current.time, today)}
+        </p>
+      )}
+    </div>
   );
 }
 
