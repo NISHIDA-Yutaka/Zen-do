@@ -643,7 +643,7 @@ function applyEdit(ta: HTMLTextAreaElement, edit: TextEdit) {
 // リストの引き継ぎ（改行）と記号の一括削除（Backspace）。docs/design.md 13.4。
 // keydown ではなく beforeinput で拾うのは、スマホのソフトキーボードが Enter/Backspace を
 // keydown に載せないことがあるため（Androidは key が "Unidentified" になる）。
-// PCのEnterは keydown で確定に使って止めているので、ここに来るのは Shift+Enter だけ
+// PCのCtrl+Enterは keydown で確定に使って止めているので、ここには来ない
 function assistListInput(e: InputEvent) {
   if (e.isComposing || !e.cancelable) return;
   const ta = e.currentTarget as HTMLTextAreaElement;
@@ -661,8 +661,8 @@ function assistListInput(e: InputEvent) {
 
 // メモはMarkdown（docs/design.md 7.2 / 13.4）。普段は整形して表示し、タップでtextarea編集に切り替える。
 // フォーカスを外した時点で保存し、また整形表示に戻る。
-// PC は Enter=確定 / Shift+Enter=改行。タッチ端末は Enter をそのまま改行に使う
-// （ソフトキーボードの改行キーで確定してしまうと、複数行メモが書けないため）。
+// PC は Enter=改行 / Ctrl+Enter（Macは⌘+Enter）=確定。タッチ端末は確定キーを持たず、欄の外をタップして閉じる
+// （ソフトキーボードに修飾キーが無いため）。
 function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => void }) {
   const [v, setV] = useState(notes);
   const [editing, setEditing] = useState(false);
@@ -690,15 +690,15 @@ function NotesField({ notes, onSave }: { notes: string; onSave: (n: string) => v
           if (v !== notes) onSave(v);
         }}
         onKeyDown={(e) => {
-          // PCのみ Enterで確定（blur→保存）。IME変換確定のEnterでは閉じない
-          if (fine && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          // PCのみ Ctrl+Enterで確定（blur→保存）。IME変換確定のEnterでは閉じない
+          if (fine && e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
             e.preventDefault();
             e.currentTarget.blur();
             return;
           }
           indentOnTab(e);
         }}
-        placeholder={fine ? "メモを書く…（Shift+Enterで改行 / Enterで確定）" : "メモを書く…（Markdownが使えます）"}
+        placeholder={fine ? "メモを書く…（Ctrl+Enterで確定）" : "メモを書く…（Markdownが使えます）"}
         aria-label="メモ"
         rows={6}
         // field-sizing-content で中身の量に合わせて伸びる（未対応ブラウザは rows=6 のまま）。
