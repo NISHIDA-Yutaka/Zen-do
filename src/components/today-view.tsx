@@ -4,6 +4,7 @@ import { Fragment, useRef, useState } from "react";
 import useSWR from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
+import { ChildTaskRows, ExpandToggle, toggleIn } from "@/components/task-children";
 import { TaskMeta } from "@/components/task-meta";
 import { useContextMenu } from "@/components/task-context-menu";
 import {
@@ -16,12 +17,19 @@ import {
   TODAY_KEY,
 } from "@/lib/client";
 import { addDays } from "@/lib/date";
+import { nestChildren } from "@/lib/task-tree";
 import type { Habit, Item } from "@/lib/types";
 import { useListKeyboard } from "@/lib/use-list-keyboard";
 import { cn } from "@/lib/utils";
 import { mutate as globalMutate } from "swr";
 
-type TodayData = { date: string; todos: Item[]; habitCandidates: Habit[]; done: Item[] };
+type TodayData = {
+  date: string;
+  todos: Item[];
+  habitCandidates: Habit[];
+  done: Item[];
+  children: Item[];
+};
 type ItemResult = { item: Item };
 
 type Toast = { itemId: string; title: string };
@@ -38,6 +46,8 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
+  // 畳んだ親のid。既定は全部開いた状態なので、閉じたものだけ持つ
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // 通知タップで /today?item=<id> に着地したら、そのタスクの詳細を開いた状態で始める
   const [openId, setOpenId] = useState<string | null>(initialItemId);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,6 +93,37 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
       setError((e as Error).message);
     } finally {
       setBusy(item.id, false);
+    }
+  }
+
+  // 子は todos（自身の期日が今日以前）と children の両方に居うるので、どちらからも外す
+  async function completeChild(child: Item) {
+    if (!data) return;
+    setError(null);
+    setBusy(child.id, true);
+    try {
+      await mutate(
+        async () => {
+          await postJson(`/api/items/${child.id}/complete`);
+          return undefined;
+        },
+        {
+          optimisticData: {
+            ...data,
+            todos: data.todos.filter((t) => t.id !== child.id),
+            children: data.children.filter((c) => c.id !== child.id),
+            done: [child, ...data.done],
+          },
+          populateCache: false,
+          revalidate: true,
+          rollbackOnError: true,
+        },
+      );
+      showToast({ itemId: child.id, title: child.title });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(child.id, false);
     }
   }
 
@@ -340,8 +381,11 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
+  // 親の下に入った子は単独の行にしない（キーボード操作も親の行だけ）
+  const rows = data ? nestChildren(data.todos, data.children) : [];
+
   const { selectedId, listProps, focusList } = useListKeyboard({
-    ids: data?.todos.map((t) => t.id) ?? [],
+    ids: rows.map((r) => r.item.id),
     onOpen: (id) => setOpenId(id),
     onComplete: (id) => {
       const it = data?.todos.find((t) => t.id === id);
@@ -355,8 +399,11 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
 
   const { open: openMenu, menu } = useContextMenu();
 
-  // 期日が今日より前＝期限切れのまま日をまたいだもの。仕分け直しが要るので上にまとめる
-  const carried = data?.todos.filter((t) => t.due_date && t.due_date < data.date) ?? [];
+  // 期日が今日より前＝期限切れのまま日をまたいだもの。仕分け直しが要るので上にまとめる。
+  // 一括移動は親の下に入った子も含める（今日の親の下で期限切れのまま残らないように）
+  const isCarried = (t: Item) => data !== undefined && t.due_date !== null && t.due_date < data.date;
+  const carriedRows = rows.filter((r) => isCarried(r.item)).length;
+  const carried = data?.todos.filter(isCarried) ?? [];
   const carriedBusy = carried.some((t) => busyIds.has(t.id));
 
   if (isLoading && !data) return <p className="text-nibi text-sm">読み込み中…</p>;
@@ -372,9 +419,9 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
       {error && <p className="text-beni py-2 text-sm">{error}</p>}
 
       <ul {...listProps} aria-label="今日のタスク">
-        {carried.length > 0 && (
+        {carriedRows > 0 && (
           <li className="flex items-center justify-between gap-2 pt-1 pb-1.5">
-            <h2 className="text-nibi text-xs font-semibold">繰り越し {carried.length}件</h2>
+            <h2 className="text-nibi text-xs font-semibold">繰り越し {carriedRows}件</h2>
             <button
               type="button"
               disabled={carriedBusy}
@@ -385,72 +432,90 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
             </button>
           </li>
         )}
-        {data.todos.map((item, i) => (
-          <Fragment key={item.id}>
-            {carried.length > 0 && i === carried.length && (
-              <li className="pt-4 pb-1.5">
-                <h2 className="text-nibi text-xs font-semibold">今日</h2>
-              </li>
-            )}
-            <li
-              onContextMenu={(e) => {
-                if (item.id.startsWith("temp-")) return;
-                openMenu(e, [
-                  { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
-                  { label: "Inboxへ", onSelect: () => clearDue(item) },
-                  "separator",
-                  {
-                    kind: "duration",
-                    current: item.duration_min,
-                    onSelect: (m) => setDuration(item, m),
-                  },
-                  "separator",
-                  { label: "削除", danger: true, onSelect: () => drop(item) },
-                ]);
-              }}
-              className={cn(
-                "border-keisen flex items-center gap-3 border-b py-3",
-                selectedId === item.id && "bg-kinari",
+        {rows.map(({ item, children }, i) => {
+          const expanded = children.length > 0 && !collapsed.has(item.id);
+          return (
+            <Fragment key={item.id}>
+              {carriedRows > 0 && i === carriedRows && (
+                <li className="pt-4 pb-1.5">
+                  <h2 className="text-nibi text-xs font-semibold">今日</h2>
+                </li>
               )}
-            >
-              <button
-                type="button"
-                aria-label={`${item.title}を完了`}
-                disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-                onClick={() => complete(item)}
-                className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
-              />
-              <button
-                type="button"
-                onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
-                className="min-w-0 flex-1 text-left"
+              <li
+                onContextMenu={(e) => {
+                  if (item.id.startsWith("temp-")) return;
+                  openMenu(e, [
+                    { label: "明日へ", onSelect: () => moveDue(item, addDays(data.date, 1)) },
+                    { label: "Inboxへ", onSelect: () => clearDue(item) },
+                    "separator",
+                    {
+                      kind: "duration",
+                      current: item.duration_min,
+                      onSelect: (m) => setDuration(item, m),
+                    },
+                    "separator",
+                    { label: "削除", danger: true, onSelect: () => drop(item) },
+                  ]);
+                }}
+                className={cn(
+                  "border-keisen flex items-center gap-3 py-3",
+                  !expanded && "border-b",
+                  selectedId === item.id && "bg-kinari",
+                )}
               >
-                <TaskMeta item={item} today={data.date} />
-              </button>
-              {item.due_date && item.due_date < data.date && (
-                <span className="flex shrink-0 items-center gap-1.5">
-                  <button
-                    type="button"
-                    disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-                    onClick={() => moveDue(item, data.date)}
-                    className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
-                  >
-                    今日へ
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="期限を外してInboxへ送る"
-                    disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
-                    onClick={() => clearDue(item)}
-                    className="text-nibi hover:text-foreground hit-y shrink-0 text-[11px] disabled:opacity-40"
-                  >
-                    Inboxへ
-                  </button>
-                </span>
+                <ExpandToggle
+                  count={children.length}
+                  open={expanded}
+                  onToggle={() => setCollapsed((s) => toggleIn(s, item.id))}
+                />
+                <button
+                  type="button"
+                  aria-label={`${item.title}を完了`}
+                  disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                  onClick={() => complete(item)}
+                  className="border-wakuiro hover:border-tokiwa hit size-6 shrink-0 rounded-full border-[1.75px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => !item.id.startsWith("temp-") && setOpenId(item.id)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <TaskMeta item={item} today={data.date} />
+                </button>
+                {item.due_date && item.due_date < data.date && (
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                      onClick={() => moveDue(item, data.date)}
+                      className="border-wakuiro hover:border-foreground hit-y shrink-0 rounded-md border px-2 py-1 text-[11px] disabled:opacity-40"
+                    >
+                      今日へ
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="期限を外してInboxへ送る"
+                      disabled={busyIds.has(item.id) || item.id.startsWith("temp-")}
+                      onClick={() => clearDue(item)}
+                      className="text-nibi hover:text-foreground hit-y shrink-0 text-[11px] disabled:opacity-40"
+                    >
+                      Inboxへ
+                    </button>
+                  </span>
+                )}
+              </li>
+              {expanded && (
+                <ChildTaskRows
+                  items={children}
+                  today={data.date}
+                  busyIds={busyIds}
+                  onComplete={completeChild}
+                  onOpen={setOpenId}
+                />
               )}
-            </li>
-          </Fragment>
-        ))}
+            </Fragment>
+          );
+        })}
       </ul>
 
       <QuickAddInline

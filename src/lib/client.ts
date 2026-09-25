@@ -48,12 +48,13 @@ export const TODAY_KEY = "/api/today";
 export const PROJECTS_KEY = "/api/projects";
 export const HABITS_KEY = "/api/habits";
 
-// Inboxは状態ではなくビュー（docs/design.md 8章）。バッジと一覧で同じ条件を使う
+// Inboxは状態ではなくビュー（docs/design.md 8章）。バッジと一覧で同じ条件を使う。
+// 子は一覧で親の下に展開する（with_children）
 export const INBOX_QUERY =
-  `/api/items?kind=todo&status=todo&parent_id=null&exclude_tag=${MEMO_TAG}&due_on=null`;
+  `/api/items?kind=todo&status=todo&parent_id=null&exclude_tag=${MEMO_TAG}&due_on=null&with_children=1`;
 
 // この先の予定（docs/design.md 12章）
-export const UPCOMING_KEY = "/api/items?kind=todo&status=todo&due_after=";
+export const UPCOMING_KEY = "/api/items?kind=todo&status=todo&with_children=1&due_after=";
 
 // Notes（docs/design.md 13.2）。未完了＝一覧 / 完了＝アーカイブ
 export const NOTES_QUERY = `/api/items?kind=todo&status=todo&tag=${MEMO_TAG}`;

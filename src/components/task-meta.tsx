@@ -58,7 +58,16 @@ export function DurationLabel({ minutes }: { minutes: number }) {
 
 // タスク行のタイトル＋メタ行（docs/design.md 2章）。Today と Inboxの「この先の予定」で共用。
 // メタ行は「時刻 → 期限超過 → タグ（無彩色） → 繰り返し/習慣（asagi）」の順。
-export function TaskMeta({ item, today }: { item: Item; today: string }) {
+// compact は親の下に展開した子タスク用。文字を一段小さく・細くして親と見分けられるようにする
+export function TaskMeta({
+  item,
+  today,
+  compact = false,
+}: {
+  item: Item;
+  today: string;
+  compact?: boolean;
+}) {
   const due = formatDueLabel(item.due_date, item.due_time, today, nowHmInJst());
   // #memo は内部マーカー（Notes用）なのでチップ表示しない
   const tags = item.tags.filter((t) => t !== MEMO_TAG);
@@ -71,7 +80,11 @@ export function TaskMeta({ item, today }: { item: Item; today: string }) {
 
   return (
     <span className="block min-w-0">
-      <span className="block text-sm font-medium break-words">{item.title}</span>
+      <span
+        className={cn("block break-words", compact ? "text-[13px]" : "text-sm font-medium")}
+      >
+        {item.title}
+      </span>
       {notePreview && (
         <span className="text-nibi/80 mt-0.5 block truncate text-[11px]">{notePreview}</span>
       )}

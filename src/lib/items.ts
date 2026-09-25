@@ -17,6 +17,22 @@ export async function getItem(id: string): Promise<Item | null> {
   return (data as Item | null) ?? null;
 }
 
+// 一覧で親の下に展開する子タスク（docs/design.md 2章）。完了・破棄済みは一覧に出さないので未完了のみ。
+// 孫は出さない（詳細モーダルで潜る）ので1階層だけ取る
+export async function loadOpenChildren(parentIds: string[]): Promise<Item[]> {
+  const ids = parentIds.filter((id) => !id.startsWith("temp-"));
+  if (ids.length === 0) return [];
+  const { data, error } = await db
+    .from("items")
+    .select("*")
+    .in("parent_id", ids)
+    .eq("status", "todo")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data as Item[]) ?? [];
+}
+
 export async function getReminders(itemId: string): Promise<Reminder[]> {
   const { data, error } = await db
     .from("reminders")

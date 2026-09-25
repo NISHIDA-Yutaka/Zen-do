@@ -1,9 +1,10 @@
 // GET /api/items  — 一覧（クエリで絞り込み。kind/status/statuses/parent_id/due_on/due_before/due_after/due_from/due_to/tag/exclude_tag）
+//                   with_children=1 で各行の未完了の子を children として同梱する
 // POST /api/items — 作成（クイックキャプチャ含む。既定 kind='todo'）
 import type { NextRequest } from "next/server";
 import { badRequest, handle, json, parseBody } from "@/lib/api";
 import { db } from "@/lib/db";
-import { buildReminderRows, getReminders, insertReminders } from "@/lib/items";
+import { buildReminderRows, getReminders, insertReminders, loadOpenChildren } from "@/lib/items";
 import { autoDueTimeReminders } from "@/lib/reminders";
 import type { Item } from "@/lib/types";
 import { createItemSchema } from "@/lib/validation";
@@ -61,7 +62,12 @@ export function GET(req: NextRequest): Promise<Response> {
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
-    return json({ items: data ?? [] });
+    const items = (data ?? []) as Item[];
+    // 一覧で親の下に展開するため、1往復で子まで揃える（後から子が現れるちらつきを避ける）
+    if (q.get("with_children") === "1") {
+      return json({ items, children: await loadOpenChildren(items.map((i) => i.id)) });
+    }
+    return json({ items });
   });
 }
 
