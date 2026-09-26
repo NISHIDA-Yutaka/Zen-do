@@ -5,7 +5,7 @@ import { ProjectSuggest, SmartPreview } from "@/components/smart-input-preview";
 import { getJson, postJson } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { parseSmartInput, type ProjectRef, type SmartParseResult } from "@/lib/smart-input";
-import type { Item } from "@/lib/types";
+import type { Item, Priority } from "@/lib/types";
 
 /** 確定時に渡す解釈済みペイロード。smart=false の画面ではタイトルのみ入る。 */
 export type QuickAddPayload = {
@@ -13,6 +13,7 @@ export type QuickAddPayload = {
   due_date?: string | null;
   due_time?: string | null;
   duration_min?: number | null;
+  priority?: Priority | null;
   tags?: string[];
   parent_id?: string | null;
   captured_raw?: string;
@@ -82,6 +83,7 @@ function buildPayload(
     due_date: parsed.dueDate ?? defaultDueDate ?? null,
     due_time: parsed.dueTime,
     duration_min: parsed.durationMin,
+    priority: parsed.priority,
     tags: parsed.tags,
     parent_id: parsed.projectId,
     captured_raw: text,
@@ -105,7 +107,7 @@ export function QuickAddInline({ placeholder, onAdd, smart = false, defaultDueDa
   function pickProject(p: ProjectRef) {
     if (!s.parsed?.projectQuery) return;
     const { start, end } = s.parsed.projectQuery;
-    setText(text.slice(0, start) + `!${p.title}` + text.slice(end));
+    setText(text.slice(0, start) + `@${p.title}` + text.slice(end));
     inputRef.current?.focus();
   }
 
@@ -184,7 +186,7 @@ export function QuickAddFab({ placeholder, onAdd, smart = false, defaultDueDate 
   function pickProject(p: ProjectRef) {
     if (!s.parsed?.projectQuery) return;
     const { start, end } = s.parsed.projectQuery;
-    setText(text.slice(0, start) + `!${p.title}` + text.slice(end));
+    setText(text.slice(0, start) + `@${p.title}` + text.slice(end));
     inputRef.current?.focus();
   }
 

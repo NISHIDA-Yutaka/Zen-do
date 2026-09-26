@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DuePicker } from "@/components/due-picker";
 import {
   DurationEditor,
+  PriorityEditor,
   ProjectPicker,
   RecurrenceEditor,
   ReminderEditor,
@@ -14,13 +15,18 @@ import { mutate as globalMutate } from "swr";
 import { deleteJson, getJson, INBOX_QUERY, patchJson, postJson, revalidateLists, TODAY_KEY } from "@/lib/client";
 import { todayInJst } from "@/lib/date";
 import { isFinePointer } from "@/lib/pointer";
-import { formatDueFull, formatDuration, formatRecurrenceRule } from "@/lib/format";
+import {
+  formatDueFull,
+  formatDuration,
+  formatRecurrenceRule,
+  PRIORITY_MEANING,
+} from "@/lib/format";
 import { continueList, removeListMarker, shiftListItem, type TextEdit } from "@/lib/markdown-input";
 import type { Item, Reminder, ReminderRule } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Detail = { item: Item; reminders: Reminder[]; children: Item[]; parent: Item | null };
-type Expanded = "due" | "duration" | "recur" | "project" | null;
+type Expanded = "due" | "duration" | "priority" | "recur" | "project" | null;
 type StepDest = "child" | "today";
 type PatchResult = { item: Item; reminders: Reminder[] };
 
@@ -414,6 +420,37 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
                       <DurationEditor
                         value={item.duration_min}
                         onChange={(m) => save({ duration_min: m })}
+                      />
+                    </span>
+                  )}
+
+                  <FieldRow
+                    label="重要度"
+                    onToggle={() => setExpanded((e) => (e === "priority" ? null : "priority"))}
+                    trailing={
+                      item.priority != null && (
+                        <button
+                          type="button"
+                          aria-label="重要度をクリア"
+                          onClick={() => save({ priority: null })}
+                          className="text-nibi/60 hover:text-foreground hit-y text-sm"
+                        >
+                          ✕
+                        </button>
+                      )
+                    }
+                  >
+                    {item.priority != null ? (
+                      `${item.priority}（${PRIORITY_MEANING[item.priority]}）`
+                    ) : (
+                      <span className="text-nibi/70">なし</span>
+                    )}
+                  </FieldRow>
+                  {expanded === "priority" && (
+                    <span className="block pb-3">
+                      <PriorityEditor
+                        value={item.priority}
+                        onChange={(p) => save({ priority: p })}
                       />
                     </span>
                   )}

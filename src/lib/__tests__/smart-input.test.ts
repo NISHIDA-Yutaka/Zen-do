@@ -97,20 +97,50 @@ describe("タグ", () => {
   });
 });
 
-describe("!プロジェクト", () => {
+describe("@プロジェクト", () => {
   it("一意に部分一致すれば紐付け", () => {
-    const r = parse("牛乳を買う !自分");
+    const r = parse("牛乳を買う @自分");
     expect(r.projectId).toBe("p1");
     expect(r.title).toBe("牛乳を買う");
   });
   it("一致なしは文字のまま残す（暗黙作成しない）", () => {
-    const r = parse("何か !存在しない");
+    const r = parse("何か @存在しない");
     expect(r.projectId).toBeNull();
-    expect(r.title).toContain("!存在しない");
+    expect(r.title).toContain("@存在しない");
   });
   it("末尾入力中はサジェスト用クエリを返す", () => {
-    const r = parse("牛乳 !じ");
+    const r = parse("牛乳 @じ");
     expect(r.projectQuery?.query).toBe("じ");
+  });
+  it("語の途中の@（メールアドレス等）はプロジェクト指定にしない", () => {
+    const r = parse("a@自分 に返信");
+    expect(r.projectId).toBeNull();
+    expect(r.projectQuery).toBeNull();
+    expect(r.title).toBe("a@自分 に返信");
+  });
+  it("旧接頭辞の ! ではプロジェクトを指定しない", () => {
+    const r = parse("牛乳を買う !自分");
+    expect(r.projectId).toBeNull();
+  });
+});
+
+describe("!重要度", () => {
+  it("!1〜!4 を重要度として読み、タイトルから外す", () => {
+    expect(parse("企画書 !1").priority).toBe(1);
+    expect(parse("!4 棚の掃除").priority).toBe(4);
+    const r = parse("企画書 !2 明日");
+    expect(r.priority).toBe(2);
+    expect(r.title).toBe("企画書");
+    expect(r.tokens.find((t) => t.kind === "priority")?.label).toBe("重要度2");
+  });
+  it("範囲外・語の途中・数字が続くものは読まない", () => {
+    expect(parse("企画書 !5").priority).toBeNull();
+    expect(parse("やった!1").priority).toBeNull();
+    expect(parse("企画書 !12").priority).toBeNull();
+    expect(parse("企画書 !12").title).toBe("企画書 !12");
+  });
+  it("指定が無ければ null", () => {
+    expect(parse("企画書").priority).toBeNull();
   });
 });
 
@@ -127,10 +157,11 @@ describe("チップの取り消し", () => {
 
 describe("複合", () => {
   it("全語彙の同時解釈", () => {
-    const r = parse("歯医者の予約 明日 15:00 #健康 !自分メンテ");
+    const r = parse("歯医者の予約 明日 15:00 #健康 !2 @自分メンテ");
     expect(r.dueDate).toBe("2026-07-18");
     expect(r.dueTime).toBe("15:00");
     expect(r.tags).toEqual(["健康"]);
+    expect(r.priority).toBe(2);
     expect(r.projectId).toBe("p1");
     expect(r.title).toBe("歯医者の予約");
   });

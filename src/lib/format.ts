@@ -1,4 +1,15 @@
-import type { RecurrenceRule, ReminderRule } from "@/lib/types";
+import type { Priority, RecurrenceRule, ReminderRule } from "@/lib/types";
+
+export const PRIORITIES: Priority[] = [1, 2, 3, 4];
+
+// 重要度の意味（アイゼンハワーマトリクスの象限・docs/design.md 21章）。数字だけだと2と3のどちらが
+// 「重要」側か迷うので、選ぶ場面ではこれを添える
+export const PRIORITY_MEANING: Record<Priority, string> = {
+  1: "緊急かつ重要",
+  2: "重要だが緊急でない",
+  3: "緊急だが重要でない",
+  4: "緊急でも重要でもない",
+};
 
 // 期限表記ルール（docs/design.md 2章）:
 // 当日 = 時刻のみ（時刻指定がなければ表示しない）/ 過去・未来 = 「M月D日」＋時刻あれば併記 / 超過は紅

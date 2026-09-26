@@ -2,9 +2,9 @@
 
 import { MEMO_TAG } from "@/lib/client";
 import { nowHmInJst } from "@/lib/date";
-import { formatDueLabel, formatDuration } from "@/lib/format";
+import { formatDueLabel, formatDuration, PRIORITY_MEANING } from "@/lib/format";
 import { notesPreview } from "@/lib/markdown";
-import type { Item } from "@/lib/types";
+import type { Item, Priority } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function ClockIcon() {
@@ -56,8 +56,23 @@ export function DurationLabel({ minutes }: { minutes: number }) {
   );
 }
 
+/** 重要度のチップ。入力の書き方（!1）と同じ表記にし、意味はツールチップで補う。1だけ目立たせる */
+export function PriorityChip({ priority }: { priority: Priority }) {
+  return (
+    <span
+      title={`重要度${priority}（${PRIORITY_MEANING[priority]}）`}
+      className={cn(
+        "rounded-full px-2 py-px text-[10.5px] font-semibold",
+        priority === 1 ? "bg-mikan-soft text-mikan" : "bg-kinari text-foreground/80",
+      )}
+    >
+      !{priority}
+    </span>
+  );
+}
+
 // タスク行のタイトル＋メタ行（docs/design.md 2章）。Today と Inboxの「この先の予定」で共用。
-// メタ行は「時刻 → 期限超過 → タグ（無彩色） → 繰り返し/習慣（asagi）」の順。
+// メタ行は「時刻 → 所要時間 → 重要度 → 期限超過 → タグ（無彩色） → 繰り返し/習慣（asagi）」の順。
 // compact は親の下に展開した子タスク用。文字を一段小さく・細くして親と見分けられるようにする
 export function TaskMeta({
   item,
@@ -88,7 +103,7 @@ export function TaskMeta({
       {notePreview && (
         <span className="text-nibi/80 mt-0.5 block truncate text-[11px]">{notePreview}</span>
       )}
-      {(due || item.duration_min !== null || chips.length > 0) && (
+      {(due || item.duration_min !== null || item.priority !== null || chips.length > 0) && (
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {due && (
             <span
@@ -102,6 +117,7 @@ export function TaskMeta({
             </span>
           )}
           {item.duration_min !== null && <DurationLabel minutes={item.duration_min} />}
+          {item.priority !== null && <PriorityChip priority={item.priority} />}
           {chips.map((c) => (
             <span
               key={c.text}

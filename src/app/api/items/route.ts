@@ -94,6 +94,7 @@ export function POST(req: NextRequest): Promise<Response> {
       due_date: dueDate,
       due_time: dueTime,
       duration_min: body.duration_min ?? null,
+      priority: body.priority ?? null,
       recurrence_rule: body.recurrence_rule ?? null,
       captured_raw: body.captured_raw ?? null,
     };

@@ -6,6 +6,9 @@ export type ItemKind = "project" | "todo";
 // 「着手中(doing)」は2026-07-16に廃止（docs/design.md 7.5）
 export type ItemStatus = "todo" | "done" | "dropped";
 
+// 重要度。1が最も重要（アイゼンハワーマトリクスの象限・docs/design.md 21章）
+export type Priority = 1 | 2 | 3 | 4;
+
 // 繰り返しルール（docs/database-design.md 4.1）
 export type RecurrenceRule =
   | { type: "daily" }
@@ -41,6 +44,8 @@ export interface Item {
   due_time: string | null;
   // 所要時間（分）。カレンダーのブロック長（docs/calendar-plan.md）
   duration_min: number | null;
+  // null は未設定（4＝いちばん低い、とは区別する）
+  priority: Priority | null;
   recurrence_rule: RecurrenceRule | null;
   generated_from: string | null;
   postponed_count: number;

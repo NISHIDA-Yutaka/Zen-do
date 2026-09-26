@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type DuePatch, parseDueInput } from "@/lib/due-input";
 import { parseDuration } from "@/lib/duration";
-import { formatDueFull, formatDuration } from "@/lib/format";
+import { formatDueFull, formatDuration, PRIORITIES, PRIORITY_MEANING } from "@/lib/format";
 import { isFinePointer } from "@/lib/pointer";
+import type { Priority } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type ContextMenuItem =
   | { label: string; onSelect: () => void; danger?: boolean }
   // 所要時間だけは選択肢が多いので、1行ずつ並べず専用の面として出す
   | { kind: "duration"; current: number | null; onSelect: (minutes: number | null) => void }
+  | { kind: "priority"; current: Priority | null; onSelect: (p: Priority | null) => void }
   // 日時の付け直し。onClear が無い＝外す操作を出さない（期日の無いInboxのタスク）
   | {
       kind: "due";
@@ -97,6 +99,16 @@ function ContextMenu({ state, onClose }: { state: NonNullable<MenuState>; onClos
                   onClose();
                 })
               }
+            />
+          </li>
+        ) : "kind" in it && it.kind === "priority" ? (
+          <li key={i}>
+            <PriorityPicker
+              current={it.current}
+              onSelect={(p) => {
+                it.onSelect(p);
+                onClose();
+              }}
             />
           </li>
         ) : "kind" in it ? (
@@ -194,6 +206,49 @@ function DuePicker({
           → {dueText(patch.due_date, patch.due_time ?? current.time, today)}
         </p>
       )}
+    </div>
+  );
+}
+
+// 1〜4＋なし。意味はツールチップで出す（メニューを縦に伸ばさないため）
+function PriorityPicker({
+  current,
+  onSelect,
+}: {
+  current: Priority | null;
+  onSelect: (p: Priority | null) => void;
+}) {
+  return (
+    <div className="px-3 py-2">
+      <p className="text-nibi pb-1.5">重要度</p>
+      <div className="flex gap-1">
+        {PRIORITIES.map((p) => (
+          <button
+            key={p}
+            type="button"
+            title={PRIORITY_MEANING[p]}
+            aria-label={`重要度${p}（${PRIORITY_MEANING[p]}）`}
+            onClick={() => onSelect(p)}
+            className={cn(
+              "min-w-7 rounded-md border px-1.5 py-0.5 text-[11px]",
+              current === p
+                ? "border-mikan bg-mikan font-bold text-white"
+                : "border-wakuiro hover:bg-kinari",
+            )}
+          >
+            {p}
+          </button>
+        ))}
+        {current !== null && (
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className="border-wakuiro text-nibi hover:bg-kinari rounded-md border px-1.5 py-0.5 text-[11px]"
+          >
+            なし
+          </button>
+        )}
+      </div>
     </div>
   );
 }

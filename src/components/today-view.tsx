@@ -260,23 +260,21 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
     }
   }
 
-  // 所要時間の設定（右クリックメニュー）。一覧に出るだけなので他の行には影響しない
-  async function setDuration(item: Item, minutes: number | null) {
+  // 所要時間・重要度の設定（右クリックメニュー）。一覧に出るだけなので他の行には影響しない
+  async function setFields(item: Item, fields: Partial<Pick<Item, "duration_min" | "priority">>) {
     if (!data) return;
     setError(null);
     setBusy(item.id, true);
     try {
       await mutate(
         async () => {
-          await patchJson(`/api/items/${item.id}`, { duration_min: minutes });
+          await patchJson(`/api/items/${item.id}`, fields);
           return undefined;
         },
         {
           optimisticData: {
             ...data,
-            todos: data.todos.map((t) =>
-              t.id === item.id ? { ...t, duration_min: minutes } : t,
-            ),
+            todos: data.todos.map((t) => (t.id === item.id ? { ...t, ...fields } : t)),
           },
           populateCache: false,
           revalidate: true,
@@ -493,7 +491,12 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
                     {
                       kind: "duration",
                       current: item.duration_min,
-                      onSelect: (m) => setDuration(item, m),
+                      onSelect: (m) => setFields(item, { duration_min: m }),
+                    },
+                    {
+                      kind: "priority",
+                      current: item.priority,
+                      onSelect: (p) => setFields(item, { priority: p }),
                     },
                     "separator",
                     { label: "削除", danger: true, onSelect: () => drop(item) },

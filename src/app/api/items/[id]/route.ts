@@ -71,6 +71,7 @@ export function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       "due_date",
       "due_time",
       "duration_min",
+      "priority",
       "recurrence_rule",
       "sort_order",
     ] as const) {

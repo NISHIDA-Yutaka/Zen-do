@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { isoWeekday } from "@/lib/date";
 import { getJson } from "@/lib/client";
-import type { Item, RecurrenceRule, Reminder, ReminderRule } from "@/lib/types";
-import { formatDuration, formatReminderRule } from "@/lib/format";
+import type { Item, Priority, RecurrenceRule, Reminder, ReminderRule } from "@/lib/types";
+import { formatDuration, formatReminderRule, PRIORITIES, PRIORITY_MEANING } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = [
@@ -104,6 +104,25 @@ export function DurationEditor({
       {DURATION_PRESETS.map((m) => (
         <SegButton key={m} on={value === m} onClick={() => onChange(value === m ? null : m)}>
           {formatDuration(m)}
+        </SegButton>
+      ))}
+    </div>
+  );
+}
+
+// 同じ値をもう一度押すと未設定に戻る（所要時間と同じ操作感）
+export function PriorityEditor({
+  value,
+  onChange,
+}: {
+  value: Priority | null;
+  onChange: (p: Priority | null) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      {PRIORITIES.map((p) => (
+        <SegButton key={p} on={value === p} onClick={() => onChange(value === p ? null : p)}>
+          {p}　{PRIORITY_MEANING[p]}
         </SegButton>
       ))}
     </div>

@@ -64,6 +64,8 @@ push_subscriptions（独立: Web Push購読端末）
 | habit_id | uuid → habits | 習慣インスタンスの場合のみ。**(habit_id, due_date)で部分ユニーク**＝同じ習慣を同じ日に二重生成できない |
 | due_date | date | 期日（JSTの暦日） |
 | due_time | time | 時刻（due_dateがある場合のみ許可。CHECK制約） |
+| duration_min | int | 所要時間（分・1〜1440）。nullは未見積り（docs/calendar-plan.md） |
+| priority | smallint | 重要度（1〜4・1が最も重要）。アイゼンハワーマトリクスの象限。**nullは未設定**で4とは区別する（docs/design.md 21章・2026-09-26） |
 | recurrence_rule | jsonb | 4章参照。due_dateがある場合のみ許可（CHECK制約） |
 | generated_from | uuid → items | 繰り返しで「どの回から生成されたか」。部分ユニーク＝二重生成防止 兼 完了取り消し時の巻き戻しに使用 |
 | postponed_count | int | 先送り回数。将来のAI介入判定（放置検出）用 |
@@ -151,7 +153,7 @@ interval_days (from=completion):  今日(JST) + n
 
 | 引き継ぐ | 引き継がない |
 |---|---|
-| title, notes, tags, parent_id, due_time, recurrence_rule, sort_order, habit_id | postponed_count（0にリセット）、絶対時刻指定のリマインダー |
+| title, notes, tags, parent_id, due_time, duration_min, priority, recurrence_rule, sort_order, habit_id | postponed_count（0にリセット）、絶対時刻指定のリマインダー |
 | 相対ルールのリマインダー（rule から remind_at を新期日で再計算して複製） | |
 | **子孫サブツリー（チェックリスト複製・2026-07-27実装）** | |
 

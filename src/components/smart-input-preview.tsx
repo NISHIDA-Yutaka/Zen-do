@@ -44,7 +44,7 @@ function Chip({ token, onCancel }: { token: SmartToken; onCancel: () => void }) 
   );
 }
 
-// !プロジェクトのサジェスト（docs/design.md 11.3）。暗黙作成はせず、明示ボタンのみ。
+// @プロジェクトのサジェスト（docs/design.md 11.3）。暗黙作成はせず、明示ボタンのみ。
 export function ProjectSuggest({
   query,
   projects,

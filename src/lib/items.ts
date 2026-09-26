@@ -160,6 +160,7 @@ async function insertChildCopy(source: Item, newParentId: string): Promise<strin
     due_date: source.due_date,
     due_time: source.due_time,
     duration_min: source.duration_min,
+    priority: source.priority,
     sort_order: source.sort_order,
     status: "todo" as const,
     generated_from: source.id,

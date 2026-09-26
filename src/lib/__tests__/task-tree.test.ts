@@ -15,6 +15,7 @@ function task(id: string, over: Partial<Item> = {}): Item {
     due_date: "2026-09-25",
     due_time: null,
     duration_min: null,
+    priority: null,
     recurrence_rule: null,
     generated_from: null,
     postponed_count: 0,

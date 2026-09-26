@@ -44,6 +44,8 @@ export const reminderRuleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("before_due_minutes"), minutes: z.number().int().min(0) }),
 ]);
 
+const priority = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
+
 // --- Item 作成（statusは常にtodoで生まれるため受け付けない） ---
 export const createItemSchema = z.object({
   kind: z.enum(["project", "todo"]).optional(),
@@ -54,6 +56,7 @@ export const createItemSchema = z.object({
   due_date: dateString.nullable().optional(),
   due_time: timeString.nullable().optional(),
   duration_min: durationMin.nullable().optional(),
+  priority: priority.nullable().optional(),
   recurrence_rule: recurrenceRuleSchema.nullable().optional(),
   reminders: z.array(reminderRuleSchema).optional(),
   captured_raw: z.string().nullable().optional(),
@@ -70,6 +73,7 @@ export const updateItemSchema = z.object({
   due_date: dateString.nullable().optional(),
   due_time: timeString.nullable().optional(),
   duration_min: durationMin.nullable().optional(),
+  priority: priority.nullable().optional(),
   recurrence_rule: recurrenceRuleSchema.nullable().optional(),
   sort_order: z.number().optional(),
   reminders: z.array(reminderRuleSchema).optional(),

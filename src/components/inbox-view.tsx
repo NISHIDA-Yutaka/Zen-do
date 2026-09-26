@@ -5,7 +5,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { ItemModal } from "@/components/item-modal";
 import { QuickAddFab, QuickAddInline, type QuickAddPayload } from "@/components/quick-add";
 import { ChildTaskRows, ExpandToggle, toggleIn } from "@/components/task-children";
-import { DurationLabel, TaskMeta } from "@/components/task-meta";
+import { DurationLabel, PriorityChip, TaskMeta } from "@/components/task-meta";
 import { useContextMenu } from "@/components/task-context-menu";
 import { addDays, todayInJst } from "@/lib/date";
 import type { DuePatch } from "@/lib/due-input";
@@ -281,18 +281,22 @@ export function InboxView() {
 
   const { open: openMenu, menu } = useContextMenu();
 
-  // 所要時間の設定（右クリックメニュー）。一覧に留まるので楽観的に値だけ差し替える
-  async function setDuration(item: Item, minutes: number | null, inUpcoming: boolean) {
+  // 所要時間・重要度の設定（右クリックメニュー）。一覧に留まるので楽観的に値だけ差し替える
+  async function setFields(
+    item: Item,
+    fields: Partial<Pick<Item, "duration_min" | "priority">>,
+    inUpcoming: boolean,
+  ) {
     setError(null);
     setBusy(item.id, true);
     const swap = (list: Item[]) =>
-      list.map((i) => (i.id === item.id ? { ...i, duration_min: minutes } : i));
+      list.map((i) => (i.id === item.id ? { ...i, ...fields } : i));
     const target = inUpcoming ? mutateUp : mutateInbox;
     const next = inUpcoming ? upList(swap(upcoming)) : inboxList(swap(items));
     try {
       await target(
         async () => {
-          await patchJson(`/api/items/${item.id}`, { duration_min: minutes });
+          await patchJson(`/api/items/${item.id}`, fields);
           return next;
         },
         {
@@ -378,7 +382,12 @@ export function InboxView() {
                       {
                         kind: "duration",
                         current: item.duration_min,
-                        onSelect: (m) => setDuration(item, m, false),
+                        onSelect: (m) => setFields(item, { duration_min: m }, false),
+                      },
+                      {
+                        kind: "priority",
+                        current: item.priority,
+                        onSelect: (p) => setFields(item, { priority: p }, false),
                       },
                       "separator",
                       { label: "削除", danger: true, onSelect: () => drop(item) },
@@ -408,9 +417,12 @@ export function InboxView() {
                     className="min-w-0 flex-1 text-left"
                   >
                     <span className="block text-sm font-medium break-words">{item.title}</span>
-                    {item.duration_min !== null && (
-                      <span className="mt-0.5 block">
-                        <DurationLabel minutes={item.duration_min} />
+                    {(item.duration_min !== null || item.priority !== null) && (
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {item.duration_min !== null && (
+                          <DurationLabel minutes={item.duration_min} />
+                        )}
+                        {item.priority !== null && <PriorityChip priority={item.priority} />}
                       </span>
                     )}
                   </button>
@@ -498,7 +510,12 @@ export function InboxView() {
                           {
                             kind: "duration",
                             current: item.duration_min,
-                            onSelect: (m) => setDuration(item, m, true),
+                            onSelect: (m) => setFields(item, { duration_min: m }, true),
+                          },
+                          {
+                            kind: "priority",
+                            current: item.priority,
+                            onSelect: (p) => setFields(item, { priority: p }, true),
                           },
                           "separator",
                           {

@@ -55,6 +55,7 @@ function makeItem(over: Partial<Item>): Item {
     due_date: null,
     due_time: null,
     duration_min: null,
+    priority: null,
     recurrence_rule: null,
     generated_from: null,
     postponed_count: 0,

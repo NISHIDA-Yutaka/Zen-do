@@ -1,11 +1,12 @@
 // Smart Input パーサ（純粋関数）。docs/design.md 11章。
-// 入力文から 期日/時刻/所要時間/タグ/プロジェクト を解釈し、残りをタイトルにする。
+// 入力文から 期日/時刻/所要時間/重要度/タグ/プロジェクト を解釈し、残りをタイトルにする。
 // 解釈は「プレビュー→確定」のためトークン単位で返し、UI側で個別に取り消せる。
 import { addDays, daysInMonth, isoWeekday } from "@/lib/date";
 import { parseDuration } from "@/lib/duration";
 import { formatDuration } from "@/lib/format";
+import type { Priority } from "@/lib/types";
 
-export type TokenKind = "date" | "time" | "duration" | "tag" | "project";
+export type TokenKind = "date" | "time" | "duration" | "priority" | "tag" | "project";
 
 export type SmartToken = {
   kind: TokenKind;
@@ -13,7 +14,7 @@ export type SmartToken = {
   start: number;
   end: number;
   label: string; // チップ表示用
-  value: string; // date='YYYY-MM-DD' / time='HH:MM' / duration=分 / tag=タグ名 / project=プロジェクトid
+  value: string; // date='YYYY-MM-DD' / time='HH:MM' / duration=分 / priority='1'〜'4' / tag=タグ名 / project=プロジェクトid
 };
 
 export type SmartParseResult = {
@@ -21,10 +22,11 @@ export type SmartParseResult = {
   dueDate: string | null;
   dueTime: string | null;
   durationMin: number | null;
+  priority: Priority | null;
   tags: string[];
   projectId: string | null;
   tokens: SmartToken[];
-  /** `!` の直後を入力中の場合のサジェスト用クエリ（nullなら非表示） */
+  /** `@` の直後を入力中の場合のサジェスト用クエリ（nullなら非表示） */
   projectQuery: { query: string; start: number; end: number } | null;
 };
 
@@ -201,8 +203,22 @@ export function parseSmartInput(
   if (timeToken && !overlaps && !cancelled.has(tokenKey(timeToken))) tokens.push(timeToken);
   if (durationToken && !cancelled.has(tokenKey(durationToken))) tokens.push(durationToken);
 
+  // 重要度 !1〜!4（docs/design.md 21章）。語の途中の「!」は拾わない（感嘆符と取り違えないため）
+  const pr = /(?<!\S)!([1-4])(?!\S)/.exec(text);
+  if (pr) {
+    const t: SmartToken = {
+      kind: "priority",
+      raw: pr[0],
+      start: pr.index,
+      end: pr.index + pr[0].length,
+      label: `重要度${pr[1]}`,
+      value: pr[1],
+    };
+    if (!cancelled.has(tokenKey(t))) tokens.push(t);
+  }
+
   // タグ（複数可）
-  const tagRe = /#([^\s#!]+)/g;
+  const tagRe = /#([^\s#!@]+)/g;
   let tm: RegExpExecArray | null;
   while ((tm = tagRe.exec(text)) !== null) {
     const t: SmartToken = {
@@ -216,9 +232,10 @@ export function parseSmartInput(
     if (!cancelled.has(tokenKey(t))) tokens.push(t);
   }
 
-  // !プロジェクト（一意に部分一致したときだけ解釈）
+  // @プロジェクト（一意に部分一致したときだけ解釈）。2026-09-26に ! から変更（! は重要度に使う）。
+  // 語の途中の「@」は拾わない（メールアドレス等をプロジェクト指定と取り違えないため）
   let projectQuery: SmartParseResult["projectQuery"] = null;
-  const projRe = /!([^\s#!]*)/g;
+  const projRe = /(?<!\S)@([^\s#!@]*)/g;
   let pm: RegExpExecArray | null;
   while ((pm = projRe.exec(text)) !== null) {
     const q = pm[1];
@@ -234,7 +251,7 @@ export function parseSmartInput(
         raw: pm[0],
         start,
         end,
-        label: `!${hits[0].title}`,
+        label: `@${hits[0].title}`,
         value: hits[0].id,
       };
       if (!cancelled.has(tokenKey(t))) tokens.push(t);
@@ -256,6 +273,7 @@ export function parseSmartInput(
   const date = active.find((t) => t.kind === "date");
   const time = active.find((t) => t.kind === "time");
   const duration = active.find((t) => t.kind === "duration");
+  const priority = active.find((t) => t.kind === "priority");
   const project = active.find((t) => t.kind === "project");
 
   return {
@@ -264,6 +282,7 @@ export function parseSmartInput(
     dueDate: date?.value ?? (time ? opts.today : null),
     dueTime: time?.value ?? null,
     durationMin: duration ? Number(duration.value) : null,
+    priority: priority ? (Number(priority.value) as Priority) : null,
     tags: active.filter((t) => t.kind === "tag").map((t) => t.value),
     projectId: project?.value ?? null,
     tokens: active,
