@@ -521,7 +521,8 @@ PC向けのグローバルショートカット。実装は `AppShell` の windo
 タスク一覧をキーボードだけで操作する。実装は `src/lib/use-list-keyboard.ts`（Today/Inbox で共用）。
 
 - 一覧 `<ul>` を `tabIndex=0` にし、**Tab でフォーカスが来たら先頭タスクを選択**（`bg-kinari` でハイライト）
-- **↑↓**: 選択移動（端でクランプ） / **Enter**: 詳細モーダル / **C・Space**: 完了 / **Delete・Backspace**: 破棄（dropped）
+- **↑↓**: 選択移動（端でクランプ） / **Enter**: 詳細モーダル / **C・Space**: 完了 / **Delete**: 破棄（dropped）
+- **誤破棄対策（2026-09-26）**: キー操作と先頭選択は**フォーカスが `<ul>` そのものにある時だけ**効かせる（`e.target === e.currentTarget`）。以前は行の中のボタン（完了の丸・子の開閉・「今日へ」等）をクリックしただけで一覧が先頭行を黙って選び、その後のBackspace/Deleteで**確認もトーストもなく先頭行が破棄**されていた。先頭には時刻の早い繰り返しタスクが来やすく、破棄で連鎖が切れて「行方不明」になっていた（8/17 Charge my phone・9/25 AM Check List）。あわせて**Backspaceを破棄から外した**（文字を消すつもりで押しやすいため）
 - **入力欄で↑**: 一覧の**最下部**タスクを選択（`QuickAddInline` の `onArrowUp` → `focusList(true)`）
 - 選択中idが完了/破棄で消えたら、描画時に選択を無効化（effectで消さずちらつきを防ぐ）
 - 対象は Today/Inbox のタスク行のみ（Projects/Habits は対象外）

@@ -43,6 +43,9 @@ export function useListKeyboard({ ids, onOpen, onComplete, onDrop }: Options) {
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // 一覧そのものにフォーカスがある時だけ効かせる。行の中のボタン（完了の丸・子の開閉など）を
+      // クリックした後のキー入力まで拾うと、知らないうちに選ばれた行が破棄される（2026-09-26に実害）
+      if (e.target !== e.currentTarget) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.nativeEvent.isComposing) return;
       switch (e.key) {
         case "ArrowDown":
@@ -67,8 +70,8 @@ export function useListKeyboard({ ids, onOpen, onComplete, onDrop }: Options) {
             onComplete(selectedId);
           }
           break;
+        // Backspaceは文字を消すつもりで押しやすく、確認なしの破棄には割り当てない
         case "Delete":
-        case "Backspace":
           if (selectedId) {
             e.preventDefault();
             onDrop(selectedId);
@@ -79,10 +82,15 @@ export function useListKeyboard({ ids, onOpen, onComplete, onDrop }: Options) {
     [selectedId, move, onOpen, onComplete, onDrop],
   );
 
-  // Tab等でリストにフォーカスが来たら未選択なら先頭を選ぶ
-  const onFocus = useCallback(() => {
-    setSelectedId((cur) => (cur && ids.includes(cur) ? cur : (ids[0] ?? null)));
-  }, [ids]);
+  // Tab等でリストにフォーカスが来たら未選択なら先頭を選ぶ。
+  // 中のボタンのフォーカスも伝わってくるので、一覧そのものが対象の時だけにする
+  const onFocus = useCallback(
+    (e: React.FocusEvent) => {
+      if (e.target !== e.currentTarget) return;
+      setSelectedId((cur) => (cur && ids.includes(cur) ? cur : (ids[0] ?? null)));
+    },
+    [ids],
+  );
 
   const listProps = {
     ref: listRef,
