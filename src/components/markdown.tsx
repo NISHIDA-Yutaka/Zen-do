@@ -3,7 +3,8 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { normalizeIndent } from "@/lib/markdown";
+import { normalizeIndent, remarkListGaps } from "@/lib/markdown";
+import { cn } from "@/lib/utils";
 
 // メモ本文のMarkdownレンダリング（docs/design.md 13.4）。
 // rehype-raw を入れないので生HTMLは描画されない＝そのままでXSS安全。
@@ -17,8 +18,15 @@ const COMPONENTS: Components = {
   p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
   ul: ({ children }) => <ul className="my-1.5 list-disc pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-1.5 list-decimal pl-5">{children}</ol>,
-  // GFMのチェックリストは箇条書き記号を消す（チェックボックス自体が印になる）
-  li: ({ children }) => <li className="my-0.5 [&:has(>input)]:list-none">{children}</li>,
+  // GFMのチェックリストは箇条書き記号を消す（チェックボックス自体が印になる）。
+  // dataGap は編集欄で空行を挟んだ項目（remarkListGaps）。空けた間をプレビューにも残す
+  li: ({ node, children }) => (
+    <li
+      className={cn("my-0.5 [&:has(>input)]:list-none", node?.properties?.dataGap === true && "mt-3")}
+    >
+      {children}
+    </li>
+  ),
   input: ({ checked, type }) =>
     type === "checkbox" ? (
       <input type="checkbox" checked={checked} readOnly className="accent-tokiwa mr-1.5 align-middle" />
@@ -51,7 +59,7 @@ const COMPONENTS: Components = {
 
 // remarkBreaks: 編集欄での改行をそのまま改行として出す（メモは散文よりメモ書きが主なため、
 // Markdown標準の「空行でしか段落が変わらない」挙動より編集時の見た目に合わせる）
-const PLUGINS = [remarkGfm, remarkBreaks];
+const PLUGINS = [remarkGfm, remarkBreaks, remarkListGaps];
 
 export function Markdown({ text }: { text: string }) {
   return (

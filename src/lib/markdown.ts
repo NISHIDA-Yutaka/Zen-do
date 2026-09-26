@@ -76,3 +76,35 @@ export function normalizeIndent(md: string): string {
     })
     .join("\n");
 }
+
+// remark の構文木のうち、ここで触る部分だけ（mdast の型は react-markdown の間接依存なので直接は使わない）
+type MdNode = {
+  type: string;
+  children?: MdNode[];
+  position?: { start: { line: number }; end: { line: number } };
+  data?: { hProperties?: Record<string, unknown> };
+};
+
+/**
+ * 空行を挟んだリスト項目に印（dataGap）を付ける（2026-09-26）。
+ * Markdownでは項目の間に空行が1つでもあるとリスト全体が「ゆるいリスト」になるだけで、
+ * どこに空行があったかは描画に残らない。編集欄で空けた間がプレビューで詰まって見えるため、
+ * 元の行番号から空行の位置を拾って、その項目だけ上に間を空けられるようにする。
+ * remark のプラグインは構文木をその場で書き換える作りなので、ここも書き換えで返す
+ */
+export function markListGaps(node: MdNode): void {
+  if (node.type === "list" && node.children) {
+    node.children.forEach((item, i) => {
+      const prev = node.children?.[i - 1];
+      const prevEnd = prev?.position?.end.line;
+      const start = item.position?.start.line;
+      if (prevEnd === undefined || start === undefined || start - prevEnd <= 1) return;
+      item.data = { ...item.data, hProperties: { ...item.data?.hProperties, dataGap: true } };
+    });
+  }
+  node.children?.forEach(markListGaps);
+}
+
+export function remarkListGaps() {
+  return (tree: MdNode) => markListGaps(tree);
+}

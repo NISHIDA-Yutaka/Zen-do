@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeIndent, notesPreview, stripMarkdown } from "@/lib/markdown";
+import { markListGaps, normalizeIndent, notesPreview, stripMarkdown } from "@/lib/markdown";
 
 describe("stripMarkdown", () => {
   it("見出し記号を落とす", () => {
@@ -94,5 +94,35 @@ describe("normalizeIndent", () => {
   it("報告のあったメモ（タブ＋箇条書き）がリストとして解釈される形になる", () => {
     const src = "弓：魂系の弓\n\t【必須】\n\t- 虚無\n\t- 流れ込む魂";
     expect(normalizeIndent(src)).toBe(`弓：魂系の弓\n${NB}【必須】\n  - 虚無\n  - 流れ込む魂`);
+  });
+});
+
+describe("markListGaps", () => {
+  type Node = Parameters<typeof markListGaps>[0];
+  // 行番号だけを持つリスト項目（構文木の必要な部分だけ）
+  const item = (start: number, end = start): Node => ({
+    type: "listItem",
+    position: { start: { line: start }, end: { line: end } },
+    children: [],
+  });
+  const gapOf = (n: Node) => n.data?.hProperties?.dataGap === true;
+
+  it("空行を挟んだ項目にだけ印を付ける", () => {
+    const list = { type: "list", children: [item(1), item(2), item(4)] };
+    markListGaps({ type: "root", children: [list] });
+    expect(list.children.map(gapOf)).toEqual([false, false, true]);
+  });
+
+  it("前の項目が入れ子で複数行にわたる時は、その最終行から数える", () => {
+    const list = { type: "list", children: [item(1, 3), item(4), item(6)] };
+    markListGaps({ type: "root", children: [list] });
+    expect(list.children.map(gapOf)).toEqual([false, false, true]);
+  });
+
+  it("入れ子のリストの中も見る", () => {
+    const inner = { type: "list", children: [item(2), item(4)] };
+    const outer = { type: "list", children: [{ ...item(1, 4), children: [inner] }] };
+    markListGaps({ type: "root", children: [outer] });
+    expect(inner.children.map(gapOf)).toEqual([false, true]);
   });
 });
