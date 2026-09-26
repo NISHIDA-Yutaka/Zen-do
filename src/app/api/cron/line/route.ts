@@ -55,10 +55,14 @@ export function GET(req: NextRequest): Promise<Response> {
     // プレビューだけ ?at=19:00 で時刻を差し替えられる（夕方・深夜の声かけを昼間に確かめるため）
     const at = params.get("at");
     const nowHm = preview && at && /^([01]\d|2[0-3]):[0-5]\d$/.test(at) ? at : nowHmInJst(now);
+    // プレビューだけ ?slot=evening で枠を絞れる。全枠だと1回の確認で Gemini を4回呼び、
+    // 有料枠で見たい1枠の4倍の費用がかかっていた
+    const only = params.get("slot");
+    const previewSlots = ALL_SLOTS.filter((s) => !only || s === only);
     // 枠は時刻を過ぎてから2時間「期限内」として5分おきに当たり続ける。送り終えた枠を先に外し、
     // 毎回 Gemini を呼んだりデータを読んだりしない（二重送信の防止自体は pushToAll が担う）
     const sent = preview ? new Set<string>() : await sentSlots("digest", today);
-    const slots = (preview ? ALL_SLOTS : dueSlots(nowHm, restDay)).filter((s) => !sent.has(s));
+    const slots = (preview ? previewSlots : dueSlots(nowHm, restDay)).filter((s) => !sent.has(s));
     if (slots.length === 0) return json({ today, nowHm, restDay, slots: [], sent: 0 });
 
     const [data, inbox] = await Promise.all([loadTodayData(now), inboxCount()]);
