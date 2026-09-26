@@ -2,6 +2,7 @@
 // ボタン操作は reply 扱いで無料なので、催促を「読むだけ」で終わらせないための要。
 import "server-only";
 import type { messagingApi } from "@line/bot-sdk";
+import type { Advice } from "@/lib/line/advice";
 import { encodeAction } from "@/lib/line/postback";
 import type { GlobalAction } from "@/lib/line/messages";
 import type { Habit, Item } from "@/lib/types";
@@ -101,6 +102,40 @@ function stuckBlock(item: Item) {
   };
 }
 
+/** Gemini が選んだ注目タスク（docs/gemini-digest-plan.md 3章）。「話を聞いて」は段階2で足す */
+function focusBlock(focus: NonNullable<Advice["focus"]>) {
+  const { item } = focus;
+  return {
+    type: "box" as const,
+    layout: "vertical" as const,
+    spacing: "xs" as const,
+    margin: "lg" as const,
+    contents: [
+      { type: "text" as const, text: item.title, size: "sm" as const, wrap: true, weight: "bold" as const },
+      { type: "text" as const, text: focus.reason, size: "xs" as const, wrap: true, color: "#6E675E" },
+      {
+        type: "box" as const,
+        layout: "horizontal" as const,
+        spacing: "sm" as const,
+        contents: [
+          smallButton(
+            "ベイビーステップにして",
+            encodeAction({ kind: "big", id: item.id }),
+            `ベイビーステップにして: ${item.title}`,
+          ),
+          smallButton("今日はパス", encodeAction({ kind: "pass", id: item.id }), `今日はパス: ${item.title}`),
+        ],
+      },
+    ],
+  };
+}
+
+function clipAltText(s: string): string {
+  // altText（通知欄・引用に出る文字列）はLINE側の上限が400文字。
+  // 超えると送信ごと弾かれてしまうので、ここで必ず収める
+  return s.length > 400 ? `${s.slice(0, 399)}…` : s;
+}
+
 /**
  * 文面＋ボタン。操作対象が無ければただのテキストで送る
  * （Flexは通知欄に altText しか出ないので、飾りだけのために使わない）。
@@ -111,14 +146,16 @@ export function buildDigestMessage(
   global: GlobalAction,
   habits: HabitButton[] = [],
   stuck: Item[] = [],
+  advice: Advice | null = null,
 ): messagingApi.Message {
-  if (tasks.length === 0 && global === null && habits.length === 0 && stuck.length === 0) {
-    return { type: "text", text };
+  // 通知欄には Gemini の声かけを先に出す（テンプレより目を引くため）
+  const plain = advice ? [advice.greeting, text].filter(Boolean).join("\n\n") : text;
+  const focus = advice?.focus ?? null;
+  if (tasks.length === 0 && global === null && habits.length === 0 && stuck.length === 0 && !focus) {
+    return { type: "text", text: plain };
   }
 
-  // altText（通知欄・引用に出る文字列）はLINE側の上限が400文字。
-  // 超えると送信ごと弾かれてしまうので、ここで必ず収める
-  const altText = text.length > 400 ? `${text.slice(0, 399)}…` : text;
+  const altText = clipAltText(plain);
 
   const footer =
     global === null
@@ -138,7 +175,10 @@ export function buildDigestMessage(
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text, size: "sm", wrap: true },
+          ...(advice ? [{ type: "text" as const, text: advice.greeting, size: "sm" as const, wrap: true }] : []),
+          ...(focus ? [focusBlock(focus)] : []),
+          ...(advice ? [{ type: "separator" as const, margin: "lg" as const }] : []),
+          ...(text ? [{ type: "text" as const, text, size: "sm" as const, wrap: true, margin: "lg" as const }] : []),
           ...stuck.map(stuckBlock),
           ...tasks.map(taskBlock),
           ...habits.map(habitBlock),

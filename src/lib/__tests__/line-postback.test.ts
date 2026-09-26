@@ -10,6 +10,7 @@ describe("encodeAction / parseAction", () => {
     { kind: "big", id: ID },
     { kind: "stuck", id: ID },
     { kind: "drop", id: ID },
+    { kind: "pass", id: ID },
     { kind: "hab_add", id: ID },
     { kind: "hab_done", id: ID },
     { kind: "alltmr" },

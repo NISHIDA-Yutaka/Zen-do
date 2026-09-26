@@ -117,3 +117,23 @@ describe("質問ブロックの出し方", () => {
     expect(withStuck.tasks.every((t) => t.id !== stuck.id)).toBe(true);
   });
 });
+
+describe("Geminiの注目タスクへの統合（noStuck）", () => {
+  const stuck = task({ title: "眼科に予約する", postponed_count: 4 });
+  const many = Array.from({ length: 8 }, (_, i) => task({ title: `t${i}` }));
+
+  it("4択を出さず、文面にも問いかけを書かない", () => {
+    const i = input({ todos: [stuck, ...many], noStuck: true });
+    expect(digestActions(i).stuck).toEqual([]);
+    expect(buildDigest(i) ?? "").not.toContain("何が引っかかっていますか");
+  });
+
+  it("4択が消えた分は通常の一覧に戻す", () => {
+    const text = buildDigest(input({ todos: [stuck], noStuck: true })) ?? "";
+    expect(text).toContain("眼科に予約する");
+  });
+
+  it("注目タスクのブロックが増える分、ボタンは4択の便と同じ上限に抑える", () => {
+    expect(digestActions(input({ todos: many, noStuck: true })).tasks).toHaveLength(3);
+  });
+});

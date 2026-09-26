@@ -23,7 +23,19 @@ export async function monthlyPushCount(today = todayInJst()): Promise<number> {
   return (data ?? []).reduce((sum, r) => sum + ((r as { message_count: number }).message_count), 0);
 }
 
-export type PushResult = { sent: number; skipped: "already_sent" | "no_recipients" | null };
+/** その日のその枠を送り終えているか（送信の重複防止そのものは pushToAll のログ挿入が担う） */
+export async function sentSlots(kind: string, today = todayInJst()): Promise<Set<string>> {
+  const { data, error } = await db
+    .from("line_push_log")
+    .select("slot")
+    .eq("kind", kind)
+    .eq("sent_on", today)
+    .not("slot", "is", null);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => (r as { slot: string }).slot));
+}
+
+export type PushResult ={ sent: number; skipped: "already_sent" | "no_recipients" | null };
 
 /**
  * 全送信先へpushする。

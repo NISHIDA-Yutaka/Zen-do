@@ -15,6 +15,11 @@ export type DigestInput = {
   habitCandidates: Habit[];
   habitAlerts: HabitAlert[];
   inboxCount: number;
+  /**
+   * 引っかかっているタスクの4択を出さない。Gemini が注目タスクを選んだ便では
+   * そちらに統合するため（docs/gemini-digest-plan.md 0章）
+   */
+  noStuck?: boolean;
 };
 
 /** 習慣候補だけは名前を並べすぎないよう抑える（未完了タスクは全件出す） */
@@ -44,6 +49,10 @@ export function stuckOf(todos: Item[]): Item[] {
     .filter((t) => !t.habit_id && t.postponed_count >= STUCK_THRESHOLD)
     .sort((a, b) => b.postponed_count - a.postponed_count)
     .slice(0, STUCK_LIMIT);
+}
+
+function askingOf(input: DigestInput): Item[] {
+  return input.noStuck ? [] : stuckOf(input.todos);
 }
 
 /**
@@ -130,7 +139,7 @@ function morning(input: DigestInput): string | null {
 
 function nudge(input: DigestInput): string | null {
   const { todos, habitAlerts } = input;
-  const stuck = stuckOf(todos);
+  const stuck = askingOf(input);
   const stuckIds = new Set(stuck.map((t) => t.id));
   // 質問ブロックに出したものは通常の一覧から外す（同じ名前が二度出ないように）
   const rest = todos.filter((t) => !stuckIds.has(t.id));
@@ -154,7 +163,7 @@ function nudge(input: DigestInput): string | null {
 
 function night(input: DigestInput): string | null {
   const { todos, done, inboxCount, habitAlerts } = input;
-  const stuck = stuckOf(todos);
+  const stuck = askingOf(input);
   const stuckIds = new Set(stuck.map((t) => t.id));
   const rest = todos.filter((t) => !stuckIds.has(t.id));
   const habitLines = habitAlertLines(habitAlerts);
@@ -208,10 +217,11 @@ export function digestActions(input: DigestInput): {
 } {
   const habitAction = input.slot === "night" ? ("hab_done" as const) : ("hab_add" as const);
   const habits = input.habitAlerts.map((a) => ({ habit: a.habit, action: habitAction }));
-  const asking = input.slot === "morning" ? [] : stuckOf(input.todos);
+  const asking = input.slot === "morning" ? [] : askingOf(input);
   const askingIds = new Set(asking.map((t) => t.id));
   const rest = input.todos.filter((t) => !askingIds.has(t.id));
-  const limit = asking.length > 0 ? BUTTON_LIMIT_WITH_STUCK : BUTTON_LIMIT;
+  // 注目タスク（noStuck）の便も4択と同じくブロックが1つ増えるので、同じ上限に抑える
+  const limit = asking.length > 0 || input.noStuck ? BUTTON_LIMIT_WITH_STUCK : BUTTON_LIMIT;
   switch (input.slot) {
     case "morning":
       return {

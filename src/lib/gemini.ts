@@ -1,9 +1,111 @@
 import "server-only";
+import { db } from "@/lib/db";
 
-// タスクをベイビーステップに分解する（テスト機能）。Google の Generative Language API を
-// サーバ側から叩く。APIキー（GEMINI_API_KEY）はクライアントに出さない。無料枠の flash 系を使う。
+// Google の Generative Language API をサーバ側から叩く。APIキー（GEMINI_API_KEY）はクライアントに出さない。
+// 無料枠の flash 系を使う。呼び出しはすべて gemini_logs に残す（docs/gemini-digest-plan.md 5章）。
 const MODEL = "gemini-3.6-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+
+// digest_preview は送らない試し出し。直近に選んだタスクの判定（kind='digest'）に混ぜないため分ける
+export type GeminiKind = "breakdown" | "digest" | "digest_preview";
+
+type LogRow = { kind: GeminiKind; ok: boolean; latency_ms: number; output?: unknown; error?: string };
+
+// 記録の失敗で本来の処理（分解・定時報告）を止めない
+async function logCall(row: LogRow): Promise<void> {
+  const { error } = await db.from("gemini_logs").insert(row);
+  if (error) console.warn("[gemini] 呼び出しの記録に失敗:", error.message);
+}
+
+class GeminiHttpError extends Error {
+  constructor(
+    readonly status: number,
+    detail: string,
+  ) {
+    super(`Gemini API エラー (${status}): ${detail.slice(0, 200)}`);
+  }
+}
+
+// 503（混雑）は一時的で、実測でも数秒後の呼び出しは通った。429（枠切れ）等はやり直しても無駄なので対象外
+function isTransient(err: unknown): boolean {
+  return err instanceof GeminiHttpError && (err.status === 500 || err.status === 503);
+}
+
+async function requestJson(
+  prompt: string,
+  schema: object,
+  temperature: number,
+  timeoutMs: number,
+): Promise<unknown> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY が未設定です");
+
+  const res = await fetch(`${ENDPOINT}?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(timeoutMs),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      // JSONで受け取り、パースを安定させる
+      generationConfig: { temperature, responseMimeType: "application/json", responseSchema: schema },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new GeminiHttpError(res.status, detail);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini から有効な応答が得られませんでした");
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error("Gemini の応答をJSONとして解釈できませんでした");
+  }
+}
+
+/**
+ * JSONで答えさせて返す。失敗時は記録してから throw。
+ * toLog は成功時に残す形（参照名を実IDに引き直した後の値など、後から読んで意味の通る形にするため）
+ */
+export async function generateJson(opts: {
+  kind: GeminiKind;
+  prompt: string;
+  schema: object;
+  temperature: number;
+  timeoutMs?: number;
+  toLog?: (value: unknown) => unknown;
+}): Promise<unknown> {
+  const started = Date.now();
+  try {
+    const attempt = () =>
+      requestJson(opts.prompt, opts.schema, opts.temperature, opts.timeoutMs ?? 30_000);
+    const value = await attempt().catch((err: unknown) => {
+      if (isTransient(err)) return attempt();
+      throw err;
+    });
+    await logCall({
+      kind: opts.kind,
+      ok: true,
+      latency_ms: Date.now() - started,
+      output: opts.toLog ? opts.toLog(value) : value,
+    });
+    return value;
+  } catch (err) {
+    await logCall({
+      kind: opts.kind,
+      ok: false,
+      latency_ms: Date.now() - started,
+      error: (err as Error).message,
+    });
+    throw err;
+  }
+}
 
 export type BreakdownContext = {
   title: string;
@@ -14,7 +116,7 @@ export type BreakdownContext = {
   dueDate?: string | null;
 };
 
-function buildPrompt(ctx: BreakdownContext): string {
+function buildBreakdownPrompt(ctx: BreakdownContext): string {
   const lines = [
     "あなたはADHDのユーザーのタスク管理を助けるアシスタントです。",
     "次のタスクを、着手のハードルが下がる具体的で小さな「ベイビーステップ」に分解してください。",
@@ -38,42 +140,14 @@ function buildPrompt(ctx: BreakdownContext): string {
   return lines.join("\n");
 }
 
-// 文脈（タイトル・メモ・プロジェクト・タグ・期日）からステップ配列を返す。失敗時は throw。
+// タスクをベイビーステップに分解する。文脈（タイトル・メモ・プロジェクト・タグ・期日）からステップ配列を返す。失敗時は throw。
 export async function breakdownTask(ctx: BreakdownContext): Promise<string[]> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY が未設定です");
-
-  const res = await fetch(`${ENDPOINT}?key=${key}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: buildPrompt(ctx) }] }],
-      generationConfig: {
-        temperature: 0.4,
-        // JSON配列で受け取り、パースを安定させる
-        responseMimeType: "application/json",
-        responseSchema: { type: "ARRAY", items: { type: "STRING" } },
-      },
-    }),
+  const parsed = await generateJson({
+    kind: "breakdown",
+    prompt: buildBreakdownPrompt(ctx),
+    schema: { type: "ARRAY", items: { type: "STRING" } },
+    temperature: 0.4,
   });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Gemini API エラー (${res.status}): ${detail.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini から有効な応答が得られませんでした");
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error("Gemini の応答をJSONとして解釈できませんでした");
-  }
   if (!Array.isArray(parsed)) throw new Error("Gemini の応答が配列ではありません");
 
   return parsed

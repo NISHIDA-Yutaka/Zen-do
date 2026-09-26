@@ -92,7 +92,23 @@ async function runBig(id: string): Promise<string> {
   if (error) throw new Error(error.message);
 
   await resetPostponeCount(id);
-  return [`「${item.title}」を${steps.length}個に分けました。`, ...steps.map((s) => `・${s}`)].join("\n");
+  // 定時報告の相棒（docs/gemini-digest-plan.md 0章）と同じ口調で返す
+  return [
+    `「${item.title}」を${steps.length}つの小さな手順に分けてみました。`,
+    ...steps.map((s) => `・${s}`),
+    "子タスクに入れてあります。まずは最初の1つだけで十分です。",
+  ].join("\n");
+}
+
+/** 注目タスクの「今日はパス」→ 今日の残りの便では選ばない（docs/gemini-digest-plan.md 4章） */
+async function runPass(id: string): Promise<string> {
+  const item = await getItem(id);
+  if (!item) return "そのタスクは見つかりませんでした。";
+  const { error } = await db
+    .from("line_focus_passes")
+    .upsert({ item_id: id, pass_date: todayInJst() }, { ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+  return `承知しました。「${item.title}」は今日はお休みにしましょう。また別の日に。`;
 }
 
 /** 「気が乗らない」→ 最初の一歩の提案（docs/line-plan.md 9.4）。まだ未実装 */
@@ -152,6 +168,8 @@ export function runAction(action: LineAction): Promise<string> {
       return runStuck(action.id);
     case "drop":
       return runDrop(action.id);
+    case "pass":
+      return runPass(action.id);
     case "hab_add":
       return runHabitAdd(action.id);
     case "hab_done":
