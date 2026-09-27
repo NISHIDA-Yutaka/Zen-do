@@ -22,7 +22,7 @@ const COMPONENTS: Components = {
   // dataGap は編集欄で空行を挟んだ項目（remarkListGaps）。空けた間をプレビューにも残す
   li: ({ node, children }) => (
     <li
-      className={cn("my-0.5 [&:has(>input)]:list-none", node?.properties?.dataGap === true && "mt-3")}
+      className={cn("my-0.5 [&:has(>input)]:list-none", node?.properties?.dataGap === true && "mt-5")}
     >
       {children}
     </li>
