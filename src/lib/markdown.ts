@@ -85,26 +85,28 @@ type MdNode = {
   data?: { hProperties?: Record<string, unknown> };
 };
 
+// ブロックを子に持つノード。段落の中（文字・改行）は同じ段落なので見ない
+const BLOCK_PARENTS = new Set(["root", "list", "listItem", "blockquote"]);
+
 /**
- * 空行を挟んだリスト項目に印（dataGap）を付ける（2026-09-26）。
- * Markdownでは項目の間に空行が1つでもあるとリスト全体が「ゆるいリスト」になるだけで、
- * どこに空行があったかは描画に残らない。編集欄で空けた間がプレビューで詰まって見えるため、
- * 元の行番号から空行の位置を拾って、その項目だけ上に間を空けられるようにする。
+ * 空行を挟んだブロック（段落・リスト・リスト項目・見出し・引用など）に印（dataGap）を付ける。
+ * 空行の位置は描画に残らないうえ、リストでは項目の間に空行があってもリスト全体が「ゆるいリスト」になるだけなので、
+ * 編集欄で空けた間がプレビューで詰まって見えていた（2026-09-26）。元の行番号から空行の位置を拾い、
+ * その要素だけ上を空けて、空行ならどこでも同じ間隔に揃える（2026-09-28）。
  * remark のプラグインは構文木をその場で書き換える作りなので、ここも書き換えで返す
  */
-export function markListGaps(node: MdNode): void {
-  if (node.type === "list" && node.children) {
-    node.children.forEach((item, i) => {
-      const prev = node.children?.[i - 1];
-      const prevEnd = prev?.position?.end.line;
-      const start = item.position?.start.line;
+export function markBlankLineGaps(node: MdNode): void {
+  if (BLOCK_PARENTS.has(node.type) && node.children) {
+    node.children.forEach((child, i) => {
+      const prevEnd = node.children?.[i - 1]?.position?.end.line;
+      const start = child.position?.start.line;
       if (prevEnd === undefined || start === undefined || start - prevEnd <= 1) return;
-      item.data = { ...item.data, hProperties: { ...item.data?.hProperties, dataGap: true } };
+      child.data = { ...child.data, hProperties: { ...child.data?.hProperties, dataGap: true } };
     });
   }
-  node.children?.forEach(markListGaps);
+  node.children?.forEach(markBlankLineGaps);
 }
 
-export function remarkListGaps() {
-  return (tree: MdNode) => markListGaps(tree);
+export function remarkBlankLineGaps() {
+  return (tree: MdNode) => markBlankLineGaps(tree);
 }
