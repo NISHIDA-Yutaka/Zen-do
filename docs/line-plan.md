@@ -263,3 +263,69 @@ RLS有効。1タスク1件（上書き）。
 
 純関数の対象: `shouldCountPostpone`（後ろ＝+1／前・同日・null→日付＝数えない）、引っかかりタスクの選定（閾値・上限2件・習慣除外・降順）、おやすみ中ブロックの文面（枠で「今日に追加」「やった」が切り替わる）、postback の新しい種類の往復。
 Gemini 呼び出し自体はテストしない（外部API）。実機確認は「気が乗らない」→提案→「別の案」→違う案→「やる」→Todayに1件、の順。
+
+## 10. 第二弾: Gemini との会話（設計確定 2026-09-29・未実装）
+
+§6 フェーズ4（自然言語）の具体化。docs/gemini-digest-plan.md の「段階2 [話を聞いて]」もここに統合する（当初案の「会話中フラグ」方式はやめる）。
+
+### 10.0 決定事項
+
+1. **テキストのタスク登録（§3 の `parseSmartInput` 捕捉）は廃止**し、テキストは全部 Gemini に渡す。「明日15時 歯医者」のような登録も Gemini が `create_task` で行う。**Gemini が失敗しても捕捉登録には戻さない**（「うまく処理できませんでした。少し時間をおいてもう一度送ってください」と返すだけ。誤登録が一番困るため）
+2. **ツールは MCP の14ツールと同じ中身**（`src/lib/mcp/queries.ts` / `mutations.ts` をそのまま呼ぶ）。削除・破棄は渡さない。`expected_title` の取り違え防止もそのまま効く。重要度・所要時間の設定は MCP にも無いので、要る時に両方へ足す
+3. **会話履歴**: 見えているやり取り（本人の発言と返事）だけを `line_messages` に残し、**直近30分・最大10往復**を毎回渡す。30分空いたら新しい話題。ツールの途中結果は残さない（必要ならGeminiが毎回調べ直す＝古いデータで判断させない）
+4. **[話を聞いて]**: 定時報告の注目タスクのボタンを `next` で出し分ける（hearing → [話を聞いて][今日はパス] / breakdown → [ベイビーステップにして][今日はパス]）。押すと「タスク『◯◯』について話を聞く」を履歴の起点に入れて Gemini が1問目を出す。**1回1問・最大3問**。**答えるたびに要点1行をメモへ追記**（途中で離れても残る）。締めの返事に選択肢ボタン [ベイビーステップにして][期日を決める][ここまで]
+5. **遅さ対策**: 受信直後に「入力中…」表示（`showLoadingAnimation`・最大60秒・無料）。ツールのやり取りは1発言あたり最大3往復、全体で50秒まで（reply トークンは受信から1分）。超えたら「時間がかかってしまいました。もう一度送ってください」。push では送り直さない（有料）。会話用は思考量を抑える設定を試す
+6. **誤操作対策**: 意図が明確な操作は確認なしで実行し、**何をしたかをタスク名つきで必ず返事に書く**（違えば「取り消して」で戻せる。毎回確認すると2往復になる）。候補が複数・登録か雑談か曖昧、なら**推測せず聞き返す**。**Gemini が行った操作はすべて `gemini_logs` に残す**（ツール名・対象・引数）
+7. **口調**: 定時報告と同じ相棒（です・ます・落ち着いた話し方・例文を置かない）。返事は1〜3文。挨拶から始めない
+8. **費用**: 見込み1往復2〜4円。まず使って記録から実額を見る。そのため `gemini_logs` に**トークン数**（`usageMetadata`）を残す。高ければ会話用だけ軽いモデルに替える
+
+ボタン（postback）は従来どおり Gemini を通さず即時処理する（無料・速い）。
+
+### 10.1 流れ
+
+```
+text ─→ webhook（200を先に返し after() で処理）
+          ├ showLoadingAnimation（60秒）
+          ├ line_messages から直近30分・10往復を読む
+          ├ Gemini（system: 相棒の口調＋判断ルール / tools: 14ツール）
+          │    functionCall → 実行 → functionResponse → …（最大3往復）
+          │    → 最終の文章
+          ├ reply（無料）
+          └ line_messages に本人の発言と返事を保存 / gemini_logs に操作とトークン数
+```
+
+### 10.2 データ（マイグレーション）
+
+```
+line_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,          -- LINEのユーザー
+  role text not null,             -- 'user' / 'assistant'
+  text text not null,
+  item_id uuid references items(id) on delete set null,  -- [話を聞いて] の起点だけ。どのタスクの話か
+  created_at timestamptz not null default now()
+)
+index (user_id, created_at desc) / RLS有効
+
+alter table gemini_logs add column usage jsonb;  -- promptTokenCount / candidatesTokenCount / thoughtsTokenCount
+```
+
+### 10.3 実装メモ
+
+- **ツール定義は MCP と二重に書かない**: `src/lib/mcp/server.ts` の zod スキーマと説明を共有し、Gemini 用には `z.toJSONSchema` で変換して `functionDeclarations`（`parametersJsonSchema`）に渡す。共有のために定義を1か所へ切り出す（MCP の挙動は変えない）
+- **Gemini 3 の関数呼び出しは「思考の署名（thoughtSignature）」を次の要求に返す必要がある**。モデルの応答 parts は加工せずそのまま `contents` に積む
+- 1回の Gemini 呼び出しの時間切れは「50秒の残り」と25秒の短い方。503は既存どおり1度やり直す
+- `gemini_logs.kind='chat'`。`output` に `{ tool_calls: [{ name, args }], reply }`
+- webhook ルートに `export const maxDuration = 60;`
+- **[話を聞いて] の締め**: 選択肢ボタンは Gemini の文章から推測せず、**Gemini が `finish_hearing` ツールを呼んだ時だけ**コードが付ける（`finish_hearing` は会話専用のツールで、何もせずボタンの合図だけを返す）。[期日を決める][ここまで] は message アクション（そのままテキストとして Gemini に届く）、[ベイビーステップにして] は既存の `big` postback
+- 聞き取りの追記の形: `・LINEで聞き取り（M/D）：要点`（`update_notes` の append）
+- postback に `hear`（id付き）を足す。押されたら `line_messages` に起点（role=user・item_id付き）を入れてから会話を1回回す
+
+### 10.4 段階
+
+1. **会話の土台**: テキスト→Gemini＋ツール、会話履歴、入力中表示、操作とトークン数の記録。**テキスト捕捉（`src/lib/line/capture.ts`）はここで廃止**
+2. **[話を聞いて]**: 注目タスクのボタン出し分け、`hear` postback、聞き取りのルール、`finish_hearing`
+
+### 10.5 テスト（純関数）
+
+会話履歴の切り出し（30分・10往復）、履歴→Gemini の `contents` 組み立て、zod→Gemini ツール定義の変換、postback `hear` の往復、締めの選択肢ボタンの組み立て。Gemini 呼び出し自体はテストしない。実機確認は「今日の残りは？」「歯医者は来週に」「Duolingo終わった」「明日15時 歯医者」（登録）「あれ終わった」（曖昧→聞き返す）の順
