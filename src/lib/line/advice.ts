@@ -4,6 +4,7 @@ import { diffDays, todayInJst } from "@/lib/date";
 import { formatDuration, PRIORITY_MEANING } from "@/lib/format";
 import type { HabitAlert } from "@/lib/habit-alerts";
 import { habitAlertLines, overdueOf } from "@/lib/line/messages";
+import { CHARACTER, RELATION } from "@/lib/line/persona";
 import type { Slot } from "@/lib/line/schedule";
 import type { Item } from "@/lib/types";
 
@@ -70,14 +71,9 @@ const SLOT_NAME: Record<Slot, string> = {
 
 const PERSONA = [
   "あなたはタスク管理アプリ「Zendo」の相棒として、LINEで定時の声かけをします。",
-  "相手はADHDの当事者です。あなたは先生でも上司でもなく、隣で一緒にタスクを回している対等な友人です。",
+  RELATION,
   "",
-  "# キャラクター",
-  "- 20〜30代の女性。です・ます調で、落ち着いた柔らかい話し方。明るさは保つが、はしゃがない",
-  "- 言葉を丁寧に選ぶ。ありきたりな褒め言葉や誇張（「すごすぎる」「天才」「神」など）は使わない",
-  "- 絵文字は気持ちが伝わるように自由に使ってよい",
-  // 語尾の具体例を書くと毎回その語尾で終わる（試し出しで理由が全部「〜してみませんか？」になった）
-  "- 上から指示せず、誘う形で話す。語尾や言い回しは毎回変える",
+  CHARACTER,
 ].join("\n");
 
 const TASKS = [

@@ -2,14 +2,13 @@
 // 応答は必ず reply（無料）で返す。push（課金対象）はここでは使わない。
 import "server-only";
 import type { webhook } from "@line/bot-sdk";
-import { todayInJst } from "@/lib/date";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/line/actions";
+import { runChat } from "@/lib/line/chat";
 import { parseAction } from "@/lib/line/postback";
 import { lineClient } from "@/lib/line/client";
 import type { LineConfig } from "@/lib/line/config";
 import { addRecipient, removeRecipient } from "@/lib/line/recipients";
-import { captureFromText } from "@/lib/line/capture";
 
 /**
  * このイベントを処理してよいか。
@@ -55,11 +54,19 @@ async function handleFollow(config: LineConfig, event: webhook.FollowEvent): Pro
   );
 }
 
+// テキストは Gemini＋ツールで処理する（docs/line-plan.md 10章。以前の捕捉登録は廃止）
 async function handleMessage(config: LineConfig, event: webhook.MessageEvent): Promise<void> {
   // 返信できない種類のイベント（replyTokenなし）は黙って捨てる
   if (event.message.type !== "text" || !event.replyToken) return;
-  const result = await captureFromText(event.message.text, todayInJst());
-  await reply(config, event.replyToken, result);
+  const userId = userIdOf(event);
+  if (!userId) return;
+  // 返事まで十数秒かかるので「入力中…」を出しておく（無料・最大60秒）。出せなくても処理は続ける
+  await lineClient(config)
+    .showLoadingAnimation({ chatId: userId, loadingSeconds: 60 })
+    .catch((err: unknown) => console.warn("[line] 入力中表示を出せませんでした:", err));
+  // 受信時刻から数える（reply トークンの期限は受信から1分）
+  const text = await runChat(userId, event.message.text, event.timestamp);
+  await reply(config, event.replyToken, text);
 }
 
 async function handlePostback(config: LineConfig, event: webhook.PostbackEvent): Promise<void> {

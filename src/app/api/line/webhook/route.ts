@@ -6,6 +6,9 @@ import { handle, json } from "@/lib/api";
 import { getLineConfig } from "@/lib/line/config";
 import { handleLineEvent } from "@/lib/line/webhook";
 
+// テキストは Gemini＋ツールで返事を作るので、after() の中で最大50秒待つ（docs/line-plan.md 10.0-5）
+export const maxDuration = 60;
+
 export function POST(req: Request): Promise<Response> {
   return handle(async () => {
     const config = getLineConfig();
