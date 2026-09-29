@@ -28,7 +28,13 @@ export function recentHistory(newestFirst: ChatMessage[], now: Date): ChatMessag
     picked.push(m);
     later = t;
   }
-  const oldestFirst = picked.reverse();
+  // 同じ時刻の発言と返事は、発言を先にする。同時刻だとDBの並びが不定で、返事→発言の順に来ると
+  // 下の「返事から始まるなら落とす」で返事が消え、答えたはずの質問に Gemini が答え直していた（2026-09-29）
+  const oldestFirst = picked
+    .reverse()
+    .map((m, i) => ({ m, i, t: new Date(m.created_at).getTime() }))
+    .sort((a, b) => a.t - b.t || (a.m.role === b.m.role ? a.i - b.i : a.m.role === "user" ? -1 : 1))
+    .map(({ m }) => m);
   // Gemini には本人の発言から始まる形で渡す（返事から始まると誰への返事か分からないため）
   const firstUser = oldestFirst.findIndex((m) => m.role === "user");
   return firstUser === -1 ? [] : oldestFirst.slice(firstUser);
@@ -102,8 +108,10 @@ export function buildChatSystemPrompt(now: { today: string; nowHm: string; restD
     "- Markdownの記号（** や # など）は使わない（LINEでは記号のまま表示されるため）",
     "",
     "# 判断",
-    // 試しで、直前の質問（履歴）にもう一度答え直してから本題に入った
+    // 答え直しの主因は履歴の並びの不具合（recentHistory）だったが、念のための歯止めとして残す
     "- 答えるのは最後の発言だけ。それより前のやり取りは文脈として読むだけで、もう一度答え直さない",
+    // 「ありがとう」にも一覧を引いて残りを並べ直していた
+    "- お礼・相づち・雑談には、ツールを使わずに短く応じる",
     "- 発言の意図を読み取り、必要ならツールで調べたり操作したりする。タスクの有無・状態・期日は必ずツールで確かめ、推測で答えない",
     // 以前のLINEは「やること＋日時」をそのまま登録していた。その使い方で毎回確認されると手間が増える
     "- やることと日時だけを書いた短い発言、または登録を頼む発言は、タスクの登録として確認せずに create_task する",

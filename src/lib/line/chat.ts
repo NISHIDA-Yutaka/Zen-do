@@ -53,10 +53,12 @@ async function loadHistory(userId: string, now: Date): Promise<ChatMessage[]> {
   return recentHistory((data ?? []) as ChatMessage[], now);
 }
 
-async function saveTurn(userId: string, userText: string, reply: string): Promise<void> {
+// 発言は受信時刻、返事は今の時刻で残す。1度に入れると両方が同じ既定時刻になり、
+// 読み出しで順番が入れ替わって返事が履歴から落ちていた（chat-core.ts の recentHistory）
+async function saveTurn(userId: string, userText: string, reply: string, receivedAt: number): Promise<void> {
   const { error } = await db.from("line_messages").insert([
-    { user_id: userId, role: "user", text: userText },
-    { user_id: userId, role: "assistant", text: reply },
+    { user_id: userId, role: "user", text: userText, created_at: new Date(receivedAt).toISOString() },
+    { user_id: userId, role: "assistant", text: reply, created_at: new Date().toISOString() },
   ]);
   // 保存に失敗しても返事は届ける（次の発言で文脈が1つ欠けるだけ）
   if (error) console.warn("[line] 会話の保存に失敗:", error.message);
@@ -138,7 +140,7 @@ export async function runChat(userId: string, userText: string, startedAt: numbe
       output: { tool_calls: toolLogs, reply: clipped },
       usage,
     });
-    await saveTurn(userId, userText, clipped);
+    await saveTurn(userId, userText, clipped, startedAt);
     return clipped;
   } catch (err) {
     const timedOut = err instanceof OutOfTimeError || (err as Error).name === "TimeoutError";

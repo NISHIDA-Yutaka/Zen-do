@@ -46,6 +46,15 @@ describe("recentHistory", () => {
     expect(got.at(-1)?.text).toBe("m0");
   });
 
+  it("発言と返事が同じ時刻なら、DBの並びに関係なく発言を先にする（返事を落とさない）", () => {
+    const at = new Date(NOW.getTime() - 60_000).toISOString();
+    const rows: ChatMessage[] = [
+      { role: "user", text: "残りは？", created_at: at },
+      { role: "assistant", text: "10件です", created_at: at },
+    ];
+    expect(recentHistory(rows, NOW).map((m) => m.text)).toEqual(["残りは？", "10件です"]);
+  });
+
   it("本人の発言から始まるように、先頭の返事は落とす", () => {
     const rows = [msg("user", "質問", 1), msg("assistant", "前の返事", 2)];
     expect(recentHistory(rows, NOW).map((m) => m.text)).toEqual(["質問"]);
