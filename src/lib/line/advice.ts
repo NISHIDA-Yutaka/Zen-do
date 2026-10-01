@@ -25,7 +25,21 @@ export type AdviceContext = {
   /** 今日の未完了（期限切れ込み・習慣や繰り返しも含む）。残りの重さを気にかける材料 */
   todos: Item[];
   done: Item[];
+  /** 習慣ごとの続き具合（お休み中の習慣は除く）。声かけでいちばん重く見る（docs/gemini-digest-plan.md 0章） */
+  habits: HabitProgress[];
+  /** 途切れそうな習慣。テンプレの代わりに声かけで伝える */
   habitAlerts: HabitAlert[];
+};
+
+export type HabitProgress = {
+  title: string;
+  streak: number;
+  streakUnit: string;
+  /** 救済期間中（あと少しで連続記録が切れる） */
+  resting: boolean;
+  /** 週n回・月n回の習慣の、今週・今月の進み具合 */
+  period: { label: "今週" | "今月"; done: number; target: number } | null;
+  doneToday: boolean;
 };
 
 export type FocusNext = "hearing" | "breakdown";
@@ -80,10 +94,16 @@ const TASKS = [
   "# やること",
   "JSONで greeting と focus を返す。",
   "",
-  "## greeting（この便の声かけ。2〜4文、150字程度まで）",
+  "## greeting（この便の声かけ。2〜5文、200字程度まで）",
+  // LINEでは改行なしの長文が読みにくかった（2026-10-01）
+  "- 読みやすく改行する。話題（習慣・完了したタスク・残りへの気遣い など）が変わる所で空行を入れて段落に分け、1段落は1〜2文にする",
   "- 挨拶（おはようございます・こんにちは・お疲れさまです 等）で始めない。最初の一文から中身を書く（LINEの通知欄には冒頭しか出ないため）",
-  "- 今日完了したものがあれば、件数や中身に具体的に触れて労う。褒めるときは事実に即して、過大にならない言葉で",
-  "- 完了がまだ無ければ、責めずに気持ちが軽くなる一言にする",
+  // 本人の希望（2026-10-01）: タスクの完了より、習慣を続けていることを褒められる方がうれしい
+  "- 褒めるときは、習慣の続き具合（連続記録・今週や今月の達成・今日こなした習慣）をいちばん重く見る。伸びている連続記録や今日やった習慣があれば、数字に具体的に触れて褒める",
+  "- 今日完了したタスクに触れるのは習慣の次。件数より中身に触れる",
+  "- 褒めるときは事実に即して、過大にならない言葉で",
+  "- 「途切れそうな習慣」があれば必ず触れる。あと何回・残り何日といった事実と、今やれば続くことを伝える。責めたり脅したりしない（その習慣のボタンは別に付く）",
+  "- 褒める材料がまだ無ければ、責めずに気持ちが軽くなる一言にする",
   "- 残っているタスクの件数で圧をかけない。「まだ」「早く」「〜しなきゃ」は使わない",
   // 例文を置くと言い回しも数字もそのまま写される（試し出しで3回とも「2つくらいだけ〜休みませんか」になった）。
   // 意図と判断材料だけを書く
@@ -166,17 +186,27 @@ function remainingLines(ctx: AdviceContext): string[] {
   ];
 }
 
+function habitLine(h: HabitProgress): string {
+  const parts = [`${h.streak}${h.streakUnit}連続`];
+  if (h.period) parts.push(`${h.period.label} ${h.period.done}/${h.period.target}回`);
+  if (h.doneToday) parts.push("今日済み");
+  if (h.resting) parts.push("救済期間中（このままだと連続が切れる）");
+  return `・${h.title}: ${parts.join(" / ")}`;
+}
+
 function situation(ctx: AdviceContext): string {
   const doneTitles = ctx.done.map((d) => `・${d.title}`);
-  const habits = habitAlertLines(ctx.habitAlerts).map((l) => `・${l}`);
+  const alerts = habitAlertLines(ctx.habitAlerts).map((l) => `・${l}`);
   return [
     "# 状況",
     `今: ${ctx.today}（${ctx.restDay ? "休日" : "平日"}）${ctx.nowHm}・${SLOT_NAME[ctx.slot]}の便`,
+    ctx.habits.length > 0 ? "習慣の続き具合:" : "習慣の続き具合: 習慣なし",
+    ...ctx.habits.map(habitLine),
+    alerts.length > 0 ? "途切れそうな習慣:" : "途切れそうな習慣: なし",
+    ...alerts,
     ...remainingLines(ctx),
     `今日完了したもの: ${ctx.done.length}件`,
     ...doneTitles,
-    habits.length > 0 ? "声をかけたい習慣:" : "声をかけたい習慣: なし",
-    ...habits,
   ].join("\n");
 }
 

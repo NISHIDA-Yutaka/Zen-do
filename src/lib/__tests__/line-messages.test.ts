@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { HabitAlert } from "@/lib/habit-alerts";
-import { buildDigest, type DigestInput, habitAlertLines, overdueOf } from "@/lib/line/messages";
+import {
+  buildDigest,
+  type DigestInput,
+  digestActions,
+  habitAlertLines,
+  overdueOf,
+} from "@/lib/line/messages";
 import type { Habit, Item } from "@/lib/types";
 
 const TODAY = "2026-09-14";
@@ -197,6 +203,23 @@ describe("habitAlertLines", () => {
 
   it("習慣の催促があれば、残タスクが無い枠でも送る", () => {
     const text = buildDigest(input({ slot: "evening", habitAlerts: [alert()] }));
+    expect(text).toContain("Study Korean");
+  });
+});
+
+describe("習慣の途切れを Gemini に任せる（noHabitLines）", () => {
+  const todo = task({ title: "買い物" });
+
+  it("文面からは習慣の途切れを消し、習慣のボタンは残す", () => {
+    for (const slot of ["morning", "evening", "night"] as const) {
+      const i = input({ slot, todos: [todo], habitAlerts: [alert()], noHabitLines: true });
+      expect(buildDigest(i) ?? "").not.toContain("Study Korean");
+      expect(digestActions(i).habits.map((h) => h.habit.title)).toEqual(["Study Korean"]);
+    }
+  });
+
+  it("指定が無ければ従来どおり文面にも書く（Gemini が失敗した便の代わり）", () => {
+    const text = buildDigest(input({ slot: "evening", todos: [todo], habitAlerts: [alert()] })) ?? "";
     expect(text).toContain("Study Korean");
   });
 });

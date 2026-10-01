@@ -50,6 +50,7 @@ function ctx(over: Partial<AdviceContext> = {}): AdviceContext {
     candidates: [],
     todos: [],
     done: [],
+    habits: [],
     habitAlerts: [],
     ...over,
   };
@@ -102,6 +103,27 @@ describe("buildAdvicePrompt", () => {
     const many = Array.from({ length: CANDIDATE_LIMIT + 5 }, (_, i) => cand(task({ title: `x${i}` })));
     const { refs } = buildAdvicePrompt(ctx({ candidates: many }));
     expect(refs.size).toBe(CANDIDATE_LIMIT);
+  });
+
+  it("習慣の続き具合（連続記録・今週の回数・今日済み・救済中）を渡す（称賛のいちばんの材料）", () => {
+    const { prompt } = buildAdvicePrompt(
+      ctx({
+        habits: [
+          { title: "Duolingo", streak: 1007, streakUnit: "日", resting: false, period: null, doneToday: true },
+          {
+            title: "Study Korean",
+            streak: 3,
+            streakUnit: "週",
+            resting: true,
+            period: { label: "今週", done: 1, target: 2 },
+            doneToday: false,
+          },
+        ],
+      }),
+    );
+    expect(prompt).toContain("・Duolingo: 1007日連続 / 今日済み");
+    expect(prompt).toContain("・Study Korean: 3週連続 / 今週 1/2回 / 救済期間中");
+    expect(prompt).toContain("途切れそうな習慣: なし");
   });
 
   it("今日完了したものを件数とタイトルで渡す（称賛の材料）", () => {

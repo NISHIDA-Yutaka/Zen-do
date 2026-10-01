@@ -20,6 +20,11 @@ export type DigestInput = {
    * そちらに統合するため（docs/gemini-digest-plan.md 0章）
    */
   noStuck?: boolean;
+  /**
+   * 習慣の途切れの文面を出さない。Gemini の声かけが付く便ではそちらが伝える
+   * （テンプレは読み流されがちなため。docs/gemini-digest-plan.md 0章）。習慣のボタンは残す
+   */
+  noHabitLines?: boolean;
 };
 
 /** 習慣候補だけは名前を並べすぎないよう抑える（未完了タスクは全件出す） */
@@ -53,6 +58,10 @@ export function stuckOf(todos: Item[]): Item[] {
 
 function askingOf(input: DigestInput): Item[] {
   return input.noStuck ? [] : stuckOf(input.todos);
+}
+
+function habitLinesOf(input: DigestInput): string[] {
+  return input.noHabitLines ? [] : habitAlertLines(input.habitAlerts);
 }
 
 /**
@@ -132,19 +141,19 @@ function morning(input: DigestInput): string | null {
     ...listOf(todos),
     overdue.length > 0 ? `うち${overdue.length}件は期限を過ぎています。急がなくて大丈夫です。` : null,
     habitCandidates.length > 0 ? `習慣も待ってます（${habits.join("、")}）。` : null,
-    ...habitAlertLines(habitAlerts),
+    ...habitLinesOf(input),
     "いい一日になりますように。",
   ]);
 }
 
 function nudge(input: DigestInput): string | null {
-  const { todos, habitAlerts } = input;
+  const { todos } = input;
   const stuck = askingOf(input);
   const stuckIds = new Set(stuck.map((t) => t.id));
   // 質問ブロックに出したものは通常の一覧から外す（同じ名前が二度出ないように）
   const rest = todos.filter((t) => !stuckIds.has(t.id));
   const overdue = overdueOf(rest, input.today, input.nowHm);
-  const habitLines = habitAlertLines(habitAlerts);
+  const habitLines = habitLinesOf(input);
   if (overdue.length === 0 && rest.length === 0 && habitLines.length === 0 && stuck.length === 0) {
     return null;
   }
@@ -162,11 +171,11 @@ function nudge(input: DigestInput): string | null {
 }
 
 function night(input: DigestInput): string | null {
-  const { todos, done, inboxCount, habitAlerts } = input;
+  const { todos, done, inboxCount } = input;
   const stuck = askingOf(input);
   const stuckIds = new Set(stuck.map((t) => t.id));
   const rest = todos.filter((t) => !stuckIds.has(t.id));
-  const habitLines = habitAlertLines(habitAlerts);
+  const habitLines = habitLinesOf(input);
   if (todos.length === 0 && done.length === 0 && habitLines.length === 0) return null;
 
   if (rest.length === 0 && stuck.length === 0) {

@@ -10,8 +10,10 @@ import {
   type AdviceCandidate,
   type AdviceContext,
   buildAdvicePrompt,
+  type HabitProgress,
   resolveAdvice,
 } from "@/lib/line/advice";
+import { listHabits } from "@/lib/mcp/queries";
 import type { Item } from "@/lib/types";
 
 // src/lib/client.ts の MEMO_TAG と同じ（クライアント側の定数はswrを引き込むので参照しない）
@@ -27,7 +29,33 @@ export type AdviceExtras = {
   passedIds: Set<string>;
   recentFocusIds: Set<string>;
   openChildren: Map<string, number>;
+  habits: HabitProgress[];
 };
+
+// 習慣の続き具合は MCP の list_habits と同じ集計を使う（連続記録の数え方を1か所に揃える）
+async function loadHabitProgress(): Promise<HabitProgress[]> {
+  const { habits } = await listHabits();
+  return habits
+    .filter((h) => !h.is_paused)
+    .map((h) => {
+      const rule = h.frequency.type;
+      const periodic = rule === "times_per_week" || rule === "times_per_month";
+      return {
+        title: h.title,
+        streak: h.streak,
+        streakUnit: h.streak_unit,
+        resting: h.resting,
+        period: periodic
+          ? {
+              label: rule === "times_per_month" ? ("今月" as const) : ("今週" as const),
+              done: h.period_done,
+              target: h.period_target,
+            }
+          : null,
+        doneToday: h.today_instance === "done",
+      };
+    });
+}
 
 async function loadInbox(): Promise<Item[]> {
   const { data, error } = await db
@@ -68,17 +96,18 @@ async function loadRecentFocusIds(now: Date): Promise<Set<string>> {
 /** 1回の cron で枠が複数あっても材料は1度だけ集める。失敗したら null（＝Geminiを使わない） */
 export async function loadAdviceExtras(todos: Item[], today: string, now: Date): Promise<AdviceExtras | null> {
   try {
-    const [inbox, passedIds, recentFocusIds] = await Promise.all([
+    const [inbox, passedIds, recentFocusIds, habits] = await Promise.all([
       loadInbox(),
       loadPassedIds(today),
       loadRecentFocusIds(now),
+      loadHabitProgress(),
     ]);
     const children = await loadOpenChildren([...todos, ...inbox].map((i) => i.id));
     const openChildren = new Map<string, number>();
     for (const c of children) {
       if (c.parent_id) openChildren.set(c.parent_id, (openChildren.get(c.parent_id) ?? 0) + 1);
     }
-    return { inbox, passedIds, recentFocusIds, openChildren };
+    return { inbox, passedIds, recentFocusIds, openChildren, habits };
   } catch (err) {
     console.warn("[line] 声かけの材料を集められませんでした:", err);
     return null;

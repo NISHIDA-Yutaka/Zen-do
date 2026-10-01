@@ -103,6 +103,7 @@ export function GET(req: NextRequest): Promise<Response> {
                   candidates: adviceCandidates(data.todos, extras),
                   todos: data.todos,
                   done: data.done,
+                  habits: extras.habits,
                   habitAlerts: data.habitAlerts,
                 },
                 preview,
@@ -121,7 +122,10 @@ export function GET(req: NextRequest): Promise<Response> {
       }
       const advice = advices.get(slot) ?? null;
       // 注目タスクを出す便は、引っかかっているタスクの4択をそちらに統合する
-      const digestInput = advice?.focus ? { ...baseInput, noStuck: true } : baseInput;
+      // 習慣の途切れも Gemini の声かけ側で伝えるので、声かけが付く便ではテンプレから外す
+      const digestInput = advice
+        ? { ...baseInput, noStuck: advice.focus !== null, noHabitLines: true }
+        : baseInput;
       const text = buildDigest(digestInput) ?? "";
 
       if (preview) {
