@@ -51,6 +51,7 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // 通知タップで /today?item=<id> に着地したら、そのタスクの詳細を開いた状態で始める
   const [openId, setOpenId] = useState<string | null>(initialItemId);
+  const [childInputOnOpen, setChildInputOnOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function setBusy(id: string, on: boolean) {
@@ -373,9 +374,12 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
   }
 
   // Smart Inputの解釈結果をそのまま反映。日付トークンがなければ今日（docs/design.md 11.4）
-  async function addTodo(payload: QuickAddPayload) {
+  async function addTodo(input: QuickAddPayload) {
     if (!data) return;
     setError(null);
+    // with_children は画面側の指示なのでAPIには送らない
+    const { with_children: withChildren, ...payload } = input;
+    let createdId: string | null = null;
     const dueDate = payload.due_date ?? data.date;
     // 今日ぶんは楽観的に即追加。今日以外はこの画面に出ないので確定後に横断再検証
     if (dueDate === data.date) {
@@ -390,6 +394,7 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
         await mutate(
           async () => {
             const { item } = await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
+            createdId = item.id;
             return { ...data, todos: [...data.todos.filter((t) => t.id !== temp.id), item] };
           },
           {
@@ -404,11 +409,17 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
       }
     } else {
       try {
-        await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
+        const { item } = await postJson<ItemResult>("/api/items", { kind: "todo", ...payload });
+        createdId = item.id;
         void revalidateLists();
       } catch (e) {
         setError((e as Error).message);
       }
+    }
+    // Smart Input の `>`: 登録したタスクの詳細を開き、子ToDoの入力から始める
+    if (withChildren && createdId) {
+      setChildInputOnOpen(true);
+      setOpenId(createdId);
     }
   }
 
@@ -635,8 +646,10 @@ export function TodayView({ initialItemId = null }: { initialItemId?: string | n
       {openId && (
         <ItemModal
           itemId={openId}
+          startWithChildInput={childInputOnOpen}
           onClose={() => {
             setOpenId(null);
+            setChildInputOnOpen(false);
             if (window.location.search) window.history.replaceState(null, "", "/today");
             void revalidateLists();
           }}

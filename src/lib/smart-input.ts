@@ -6,7 +6,7 @@ import { parseDuration } from "@/lib/duration";
 import { formatDuration } from "@/lib/format";
 import type { Priority } from "@/lib/types";
 
-export type TokenKind = "date" | "time" | "duration" | "priority" | "tag" | "project";
+export type TokenKind = "date" | "time" | "duration" | "priority" | "children" | "tag" | "project";
 
 export type SmartToken = {
   kind: TokenKind;
@@ -23,6 +23,8 @@ export type SmartParseResult = {
   dueTime: string | null;
   durationMin: number | null;
   priority: Priority | null;
+  /** `>` があれば、登録後に詳細を開いて子タスクの入力から始める */
+  withChildren: boolean;
   tags: string[];
   projectId: string | null;
   tokens: SmartToken[];
@@ -203,6 +205,20 @@ export function parseSmartInput(
   if (timeToken && !overlaps && !cancelled.has(tokenKey(timeToken))) tokens.push(timeToken);
   if (durationToken && !cancelled.has(tokenKey(durationToken))) tokens.push(durationToken);
 
+  // 子タスクの入力へ進む印 `>`（docs/design.md 11.2）。単独の `>` だけを拾う（「A>B」のような比較を取り違えないため）
+  const gt = /(?<!\S)>(?!\S)/.exec(text);
+  if (gt) {
+    const t: SmartToken = {
+      kind: "children",
+      raw: gt[0],
+      start: gt.index,
+      end: gt.index + gt[0].length,
+      label: "子タスクを追加",
+      value: "1",
+    };
+    if (!cancelled.has(tokenKey(t))) tokens.push(t);
+  }
+
   // 重要度 !1〜!4（docs/design.md 21章）。語の途中の「!」は拾わない（感嘆符と取り違えないため）
   const pr = /(?<!\S)!([1-4])(?!\S)/.exec(text);
   if (pr) {
@@ -283,6 +299,7 @@ export function parseSmartInput(
     dueTime: time?.value ?? null,
     durationMin: duration ? Number(duration.value) : null,
     priority: priority ? (Number(priority.value) as Priority) : null,
+    withChildren: active.some((t) => t.kind === "children"),
     tags: active.filter((t) => t.kind === "tag").map((t) => t.value),
     projectId: project?.value ?? null,
     tokens: active,

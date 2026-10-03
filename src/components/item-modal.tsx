@@ -31,8 +31,19 @@ type StepDest = "child" | "today";
 type PatchResult = { item: Item; reminders: Reminder[] };
 
 // タスク詳細モーダル（docs/design.md 7章）。全リストの行タップで開く・項目ごと自動保存。
-export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => void }) {
+export function ItemModal({
+  itemId,
+  onClose,
+  startWithChildInput = false,
+}: {
+  itemId: string;
+  onClose: () => void;
+  /** 開いた直後に「子ToDoを追加」の入力欄にフォーカスする（Smart Input の `>`） */
+  startWithChildInput?: boolean;
+}) {
   const [stack, setStack] = useState<string[]>([itemId]);
+  // 最初の1回だけ。入力欄を閉じたら（フォーカスが外れたら）以後は通常どおりボタンに戻す
+  const [autoChildInput, setAutoChildInput] = useState(startWithChildInput);
   const currentId = stack[stack.length - 1];
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -552,7 +563,11 @@ export function ItemModal({ itemId, onClose }: { itemId: string; onClose: () => 
                   </li>
                 ))}
               </ul>
-              <AddChildField onAdd={addChild} />
+              <AddChildField
+                onAdd={addChild}
+                initiallyOpen={autoChildInput && stack.length === 1}
+                onClose={() => setAutoChildInput(false)}
+              />
               <BreakdownPanel
                 busy={breakdownBusy}
                 steps={breakdownSteps}
@@ -924,8 +939,16 @@ function BreakdownPanel({
   );
 }
 
-function AddChildField({ onAdd }: { onAdd: (title: string) => void }) {
-  const [open, setOpen] = useState(false);
+function AddChildField({
+  onAdd,
+  initiallyOpen = false,
+  onClose,
+}: {
+  onAdd: (title: string) => void;
+  initiallyOpen?: boolean;
+  onClose?: () => void;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
   const [v, setV] = useState("");
 
   function commit() {
@@ -952,13 +975,19 @@ function AddChildField({ onAdd }: { onAdd: (title: string) => void }) {
       type="text"
       value={v}
       onChange={(e) => setV(e.target.value)}
-      onBlur={() => setOpen(false)}
+      onBlur={() => {
+        setOpen(false);
+        onClose?.();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && !e.nativeEvent.isComposing) {
           e.preventDefault();
           commit();
         }
-        if (e.key === "Escape") setOpen(false);
+        if (e.key === "Escape") {
+          setOpen(false);
+          onClose?.();
+        }
       }}
       placeholder="子ToDoのタイトル…（Enterで追加）"
       aria-label="子ToDoを追加"

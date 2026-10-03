@@ -39,6 +39,7 @@ export function NotesView() {
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
+  const [childInputOnOpen, setChildInputOnOpen] = useState(false);
   const today = todayInJst();
 
   const notes = byUpdatedDesc(notesData?.items ?? []);
@@ -54,8 +55,11 @@ export function NotesView() {
   }
 
   // この画面からの追加は #memo を自動付与（毎回打たなくてよい）
-  async function addNote(payload: QuickAddPayload) {
+  async function addNote(input: QuickAddPayload) {
     setError(null);
+    // with_children は画面側の指示なのでAPIには送らない
+    const { with_children: withChildren, ...payload } = input;
+    let createdId: string | null = null;
     const tags = payload.tags?.includes(MEMO_TAG)
       ? payload.tags
       : [...(payload.tags ?? []), MEMO_TAG];
@@ -64,6 +68,7 @@ export function NotesView() {
       await mutateNotes(
         async () => {
           const { item } = await postJson<ItemResult>("/api/items", { ...payload, tags });
+          createdId = item.id;
           return { items: [item, ...notes.filter((i) => i.id !== temp.id)] };
         },
         {
@@ -75,6 +80,11 @@ export function NotesView() {
       );
     } catch (e) {
       setError((e as Error).message);
+    }
+    // Smart Input の `>`: 登録したメモの詳細を開き、子ToDoの入力から始める
+    if (withChildren && createdId) {
+      setChildInputOnOpen(true);
+      setOpenId(createdId);
     }
   }
 
@@ -228,8 +238,10 @@ export function NotesView() {
       {openId && (
         <ItemModal
           itemId={openId}
+          startWithChildInput={childInputOnOpen}
           onClose={() => {
             setOpenId(null);
+            setChildInputOnOpen(false);
             void revalidateLists();
           }}
         />

@@ -124,6 +124,31 @@ describe("@プロジェクト", () => {
   });
 });
 
+describe(">子タスクの入力へ", () => {
+  it("単独の > は印として読み、タイトルから外す", () => {
+    const r = parse("引っ越し準備 明日 >");
+    expect(r.withChildren).toBe(true);
+    expect(r.title).toBe("引っ越し準備");
+    expect(r.dueDate).toBe("2026-07-18");
+    expect(r.tokens.find((t) => t.kind === "children")?.label).toBe("子タスクを追加");
+  });
+  it("語にくっついた > は読まない（比較などと取り違えない）", () => {
+    const r = parse("A>B を比べる");
+    expect(r.withChildren).toBe(false);
+    expect(r.title).toBe("A>B を比べる");
+  });
+  it("指定が無ければ false", () => {
+    expect(parse("引っ越し準備").withChildren).toBe(false);
+  });
+  it("チップを取り消すと印として扱わず文字に戻る", () => {
+    const r1 = parse("準備 >");
+    const t = r1.tokens.find((x) => x.kind === "children");
+    const r2 = parse("準備 >", [`children:${t!.start}:${t!.raw}`]);
+    expect(r2.withChildren).toBe(false);
+    expect(r2.title).toBe("準備 >");
+  });
+});
+
 describe("!重要度", () => {
   it("!1〜!4 を重要度として読み、タイトルから外す", () => {
     expect(parse("企画書 !1").priority).toBe(1);

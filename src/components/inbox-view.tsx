@@ -39,6 +39,7 @@ export function InboxView() {
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
+  const [childInputOnOpen, setChildInputOnOpen] = useState(false);
   // 畳んだ親のid。既定は全部開いた状態なので、閉じたものだけ持つ
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -55,8 +56,11 @@ export function InboxView() {
   const upcomingRows = nestChildren(upcoming, upChildren);
 
   // 日付トークンがあれば期日つきで作成＝Inboxビューには残らない（docs/design.md 11.4）
-  async function capture(payload: QuickAddPayload) {
+  async function capture(input: QuickAddPayload) {
     setError(null);
+    // with_children は画面側の指示なのでAPIには送らない
+    const { with_children: withChildren, ...payload } = input;
+    let createdId: string | null = null;
     // 期日なし＝Inboxに残るものだけ楽観的に即追加
     if (!payload.due_date && !payload.parent_id) {
       const temp = makeOptimisticItem({ title: payload.title, tags: payload.tags ?? [] });
@@ -64,6 +68,7 @@ export function InboxView() {
         await mutateInbox(
           async () => {
             const { item } = await postJson<ItemResult>("/api/items", payload);
+            createdId = item.id;
             return inboxList([item, ...items.filter((i) => i.id !== temp.id)]);
           },
           {
@@ -78,11 +83,17 @@ export function InboxView() {
       }
     } else {
       try {
-        await postJson<ItemResult>("/api/items", payload);
+        const { item } = await postJson<ItemResult>("/api/items", payload);
+        createdId = item.id;
         void revalidateLists();
       } catch (e) {
         setError((e as Error).message);
       }
+    }
+    // Smart Input の `>`: 登録したタスクの詳細を開き、子ToDoの入力から始める
+    if (withChildren && createdId) {
+      setChildInputOnOpen(true);
+      setOpenId(createdId);
     }
   }
 
@@ -570,8 +581,10 @@ export function InboxView() {
       {openId && (
         <ItemModal
           itemId={openId}
+          startWithChildInput={childInputOnOpen}
           onClose={() => {
             setOpenId(null);
+            setChildInputOnOpen(false);
             void revalidateLists();
           }}
         />

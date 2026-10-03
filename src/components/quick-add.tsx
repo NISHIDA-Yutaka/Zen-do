@@ -15,6 +15,8 @@ export type QuickAddPayload = {
   duration_min?: number | null;
   priority?: Priority | null;
   tags?: string[];
+  /** 画面側だけで使う（APIには送らない）。`>` で、登録後に詳細を開いて子タスクの入力から始める */
+  with_children?: boolean;
   parent_id?: string | null;
   captured_raw?: string;
 };
@@ -84,6 +86,7 @@ function buildPayload(
     due_time: parsed.dueTime,
     duration_min: parsed.durationMin,
     priority: parsed.priority,
+    with_children: parsed.withChildren,
     tags: parsed.tags,
     parent_id: parsed.projectId,
     captured_raw: text,
