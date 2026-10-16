@@ -1,0 +1,4 @@
+# 依存パッケージのインストールスクリプトは原則実行しない（どれもビルド済みのバイナリが配布されている）
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
